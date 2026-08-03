@@ -1,0 +1,73 @@
+Raw output of queries/capture-one-shot.sql section A, run against Supabase
+project nnkfnlrscywlosfwdlsw on 2026-08-03.
+
+Kept verbatim and unedited. claims-tracker.sql in this directory is a
+reconstruction FROM this text; if the two ever disagree, this file is what the
+database actually said and the reconstruction is what someone wrote down.
+
+========================================================================
+
+SUPABASE CAPTURE  |  2026-08-03 16:40:28.880887+00  |  PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit
+
+===== 1. WHAT EXISTS =====
+claims [table] rls=true pol=3 cols=12 rows~264
+
+===== 2. NON-DEFAULT SCHEMAS =====
+(none beyond Supabase built-ins)
+
+===== 3. COLUMNS =====
+claims:
+  id uuid NOTNULL DEF gen_random_uuid()
+  person text NOTNULL
+  service text NOTNULL
+  service_date date NOTNULL
+  tax_year integer NOTNULL
+  amount_submitted numeric(10,2) NOTNULL
+  amount_paid numeric(10,2) NOTNULL DEF 0
+  status text NOTNULL DEF 'active'::text
+  flag_status text
+  note text
+  created_at timestamp with time zone NOTNULL DEF now()
+  insurer text
+
+===== 4. RLS POLICIES =====
+claims.claims insert (authenticated) [INSERT to authenticated]
+    USING (none)
+    CHECK (auth.role() = 'authenticated'::text)
+
+claims.claims select (authenticated) [SELECT to authenticated]
+    USING (auth.role() = 'authenticated'::text)
+    CHECK (none)
+
+claims.claims update (authenticated) [UPDATE to authenticated]
+    USING (auth.role() = 'authenticated'::text)
+    CHECK (auth.role() = 'authenticated'::text)
+
+----- TABLES NEEDING ATTENTION -----
+(none - every table has RLS on with at least one policy)
+
+===== 5. FUNCTIONS =====
+(no functions)
+
+----- OVERLOADS SHARING A NAME (breaks every rpc() call) -----
+(none - good)
+
+===== 6. VIEWS =====
+(no views)
+
+===== 7. GRANTS =====
+claims -> anon(delete,insert,references,select,trigger,truncate,update) authenticated(delete,insert,references,select,trigger,truncate,update) service_role(delete,insert,references,select,trigger,truncate,update)
+
+===== 8. CONSTRAINTS =====
+claims: claims_pkey PRIMARY KEY (id)
+
+===== 9. INDEXES =====
+CREATE INDEX claims_dedupe_idx ON public.claims USING btree (person, amount_submitted, service_date)
+CREATE INDEX claims_person_idx ON public.claims USING btree (person)
+CREATE UNIQUE INDEX claims_pkey ON public.claims USING btree (id)
+CREATE INDEX claims_tax_year_idx ON public.claims USING btree (tax_year)
+
+===== 10. TRIGGERS =====
+(none)
+
+===== END =====

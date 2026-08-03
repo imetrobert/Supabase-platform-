@@ -71,6 +71,47 @@ data in the project. Its policies have never been read, so there is nothing to
 say about it yet beyond that it needs the same treatment as step 2 and probably
 sooner.
 
+## 3b. Project 2 — decide on `claims_dedupe_idx`
+
+**Status:** not started. **Depends on:** reading the `claims-tracker` repo.
+
+`claims_dedupe_idx` on `public.claims` is a plain btree index over
+`(person, amount_submitted, service_date)`, despite the name. It speeds up
+duplicate lookups and enforces nothing.
+
+Two possibilities, and the repo settles which:
+
+- **The app enforces dedupe itself** — checks for a match before inserting. Then
+  the index is doing exactly its job and only the name misleads. Nothing to fix;
+  consider a comment on the index.
+- **The app assumes the database enforces it.** Then duplicates can already
+  exist, and making the index unique will fail on the existing ~264 rows until
+  they are reconciled. That reconciliation is a data decision, not a schema one:
+  two identical `(person, amount, date)` rows may be a double entry or may be
+  two genuinely identical claims on the same day.
+
+Check for existing duplicates before deciding anything:
+
+```sql
+select person, amount_submitted, service_date, count(*)
+from public.claims
+group by 1,2,3 having count(*) > 1;
+```
+
+That query is read-only and settles how big the question is. If it returns
+nothing, a unique index can go on cleanly whenever the app question is
+answered — see pattern 6 in [`../policies/patterns.md`](../policies/patterns.md).
+
+## 3c. Project 2 — confirm the missing DELETE policy is deliberate
+
+**Status:** not started. **Effort:** one question, no SQL.
+
+`public.claims` has policies for SELECT, INSERT and UPDATE but none for DELETE,
+so deletes are denied to everyone except `service_role`. That is a sensible
+shape for a financial record — nothing is destroyed, `status` marks what is no
+longer active. Recorded only to confirm it was designed that way rather than
+forgotten, since the app would fail silently on a delete either way.
+
 ## 4. Adopt the house patterns for anything new
 
 **Status:** ongoing, not a migration.

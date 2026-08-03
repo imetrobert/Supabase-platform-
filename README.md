@@ -54,7 +54,9 @@ Started 2026-08-03. This is a first pass, deliberately partial:
   `etf_*`, `job_*` and `profiles` are known to exist, but their structure has
   never been read out of the catalog. Gaps are marked `UNKNOWN` rather than
   guessed at.
-- **Project 2 has never been looked at at all.**
+- **Project 2 is captured in full** — structure only, auth still outstanding. It
+  holds a single table, `claims`, and the reconstruction was verified by
+  replaying it and diffing the re-capture against the original.
 
 Filling those gaps means running
 [`queries/capture-one-shot.sql`](queries/capture-one-shot.sql) against each

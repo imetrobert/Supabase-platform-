@@ -1,8 +1,11 @@
-# Project `ipnajvgwtjrlecbqfwrh`
+# Project 1 — `ipnajvgwtjrlecbqfwrh`
 
-**Shared project.** More than one app points at this single database. That is
-the most important fact about it and the source of most of its open problems —
-see [Cross-app exposure](#cross-app-exposure) below.
+**Shared by four apps.** They all point at this single database. That is the
+most important fact about it and the source of most of its open problems — see
+[Cross-app exposure](#cross-app-exposure) below.
+
+The other project, [`claims-tracker`](UNKNOWN-REF-claims-tracker.md), is
+standalone and shares nothing with this one.
 
 - PostgreSQL 17.6
 - API base: `https://ipnajvgwtjrlecbqfwrh.supabase.co`
@@ -59,11 +62,30 @@ No `service_role` key is used by this app. It has no server side — everything
 runs in the browser, which is why every access decision has to hold up against a
 caller holding the publishable key and nothing else.
 
-### Other apps — not yet enumerated
+### Other apps on this project
 
-Table prefixes `etf_*`, `job_*` and `profiles` exist in this project and belong
-to other apps. Which app owns which prefix, where those apps are deployed, and
-what keys they use is **UNKNOWN** and needs a pass of its own.
+Confirmed by the owner 2026-08-03: **four repos share this project.**
+
+| Repo | Likely tables | Confidence |
+|---|---|---|
+| [`Ai-with-Robert-Invoicing-System`](https://github.com/imetrobert/Ai-with-Robert-Invoicing-System) | `invoices`, `survey_responses` | Confirmed — read from source |
+| [`jobs`](https://github.com/imetrobert/jobs) | `job_*` | Strongly implied by the prefix; not yet confirmed |
+| [`tsx-etf-signal-notifier`](https://github.com/imetrobert/tsx-etf-signal-notifier) | `etf_*` | Strongly implied by the prefix; not yet confirmed |
+| [`Facebook-marketplace-generator`](https://github.com/imetrobert/Facebook-marketplace-generator) | **UNKNOWN** | No tables attributed to it at all |
+
+Two things this does not yet tell us:
+
+- **`profiles` has no owner.** It is unattributed, and on a shared project a
+  table by that name is usually auth-adjacent — one row per user, often carrying
+  a role. If it does carry a role, it is the natural basis for fixing the
+  cross-app policy problem below, so identifying it is worth doing early.
+- **`Facebook-marketplace-generator` has no tables.** Either it owns `profiles`,
+  or it owns tables nobody has listed yet, or it uses this project for auth or
+  storage only. Block 1 of the capture will settle it.
+
+Deploy targets, keys and auth usage for these three apps have not been recorded.
+Reading their repos would settle all of it; none of them are attached to this
+session.
 
 ---
 
@@ -82,6 +104,14 @@ invoicing app's owner specifically. On a single-app project it would read as
 "logged in"; on a shared one it means every app's users share one trust
 boundary, and any account that can sign in anywhere can read and write every
 invoice.
+
+Now that the sharing is confirmed as **four apps**, the question is concrete:
+if any one of `jobs`, `tsx-etf-signal-notifier` or `Facebook-marketplace-generator`
+signs users up — even just to a signup form nobody uses — those accounts can
+read and write every invoice, and every row in `survey_responses`. Whether that
+is currently true is unanswered until block 7 is run; the app that ends up
+mattering most here is whichever one has the loosest signup, not the one holding
+the sensitive data.
 
 Known, deliberately not acted on yet, and the main driver behind the migration
 plan — see [`../migrations/PLAN.md`](../migrations/PLAN.md).

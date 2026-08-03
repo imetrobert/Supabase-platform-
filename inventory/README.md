@@ -4,7 +4,14 @@ One file per Supabase project, named after the project ref.
 
 | File | Project ref | Apps | Last verified |
 |---|---|---|---|
-| [`ipnajvgwtjrlecbqfwrh.md`](ipnajvgwtjrlecbqfwrh.md) | `ipnajvgwtjrlecbqfwrh` | Invoicing (+ others, not yet enumerated) | 2026-08-03, partial |
+| [`ipnajvgwtjrlecbqfwrh.md`](ipnajvgwtjrlecbqfwrh.md) | `ipnajvgwtjrlecbqfwrh` | **4, shared** — invoicing, jobs, tsx-etf-signal-notifier, Facebook-marketplace-generator | 2026-08-03, partial |
+| [`UNKNOWN-REF-claims-tracker.md`](UNKNOWN-REF-claims-tracker.md) | not yet recorded | 1, standalone — claims-tracker | never |
+
+**Two projects, confirmed by the owner 2026-08-03.** Repos not listed above
+(`imetrobert.github.io`, `aiwithrobert`, `aiwithrobert-brand-assets`) use no
+Supabase project. That is worth stating explicitly: an app that is absent from
+this table should be absent because it was checked and uses no database, not
+because nobody got to it.
 
 ## Adding a project
 

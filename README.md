@@ -44,14 +44,17 @@ they are not secret — they appear in every request URL the browser makes.
 
 Started 2026-08-03. This is a first pass, deliberately partial:
 
-- The invoicing app's slice of project `ipnajvgwtjrlecbqfwrh` is captured in
-  full, transcribed from that app's own repo where it had already been
-  reconstructed from catalog queries.
-- **The rest of that project is not captured.** Other apps' tables (`etf_*`,
-  `job_*`, `profiles`) and `survey_responses` are known to exist, but their
-  structure has never been read out of the catalog. Gaps are marked `UNKNOWN`
-  rather than guessed at.
-- No other Supabase project has been inventoried yet.
+- **Two Supabase projects exist.** Project 1 (`ipnajvgwtjrlecbqfwrh`) is shared
+  by four apps; project 2 is standalone behind `claims-tracker` and its ref has
+  not been recorded yet.
+- The invoicing app's slice of project 1 is captured in full, transcribed from
+  that app's own repo where it had already been reconstructed from catalog
+  queries.
+- **The other three apps on project 1 are not captured.** `survey_responses`,
+  `etf_*`, `job_*` and `profiles` are known to exist, but their structure has
+  never been read out of the catalog. Gaps are marked `UNKNOWN` rather than
+  guessed at.
+- **Project 2 has never been looked at at all.**
 
 Filling those gaps means running [`queries/inventory.sql`](queries/inventory.sql)
 and committing the output. See [`inventory/README.md`](inventory/README.md) for

@@ -4,8 +4,8 @@
 most important fact about it and the source of most of its open problems — see
 [Cross-app exposure](#cross-app-exposure) below.
 
-The other project, [`claims-tracker`](UNKNOWN-REF-claims-tracker.md), is
-standalone and shares nothing with this one.
+The other project, [`nnkfnlrscywlosfwdlsw`](nnkfnlrscywlosfwdlsw.md), is
+standalone behind `claims-tracker` and shares nothing with this one.
 
 - PostgreSQL 17.6
 - API base: `https://ipnajvgwtjrlecbqfwrh.supabase.co`
@@ -130,12 +130,16 @@ Everything in this section is a gap, not a finding.
   invoicing app's own notes and its source, not from a catalog read of this
   project.
 - Whether any other schema besides `public` is in use.
-- Auth configuration: how many user accounts exist, whether signups are open,
-  which providers are enabled. **This matters directly** — the blast radius of
-  the `auth.role() = 'authenticated'` policy above depends entirely on who can
-  get an authenticated session, and open signups would make it severe.
+- Auth configuration: how many user accounts exist, which providers are
+  enabled, and whether signups are open. **This matters directly** — the blast
+  radius of the `auth.role() = 'authenticated'` policy above depends entirely on
+  who can get an authenticated session, and open signups would make it severe.
+  Account counts and providers are readable in SQL (capture block 7); whether
+  signups are open is the one part that is genuinely dashboard-only.
 - Storage buckets, Edge Functions, scheduled jobs, database webhooks.
 - Whether a `service_role` key is in use by any other app.
 
-Running [`../queries/inventory.sql`](../queries/inventory.sql) closes most of
-these in one pass. The auth questions are dashboard-only.
+Running [`../queries/capture-blocks.sql`](../queries/capture-blocks.sql) closes
+most of these in one pass — or
+[`../queries/inventory.sql`](../queries/inventory.sql) for the same information
+as ordinary result tables.

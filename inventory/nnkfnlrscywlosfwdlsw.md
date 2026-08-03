@@ -1,11 +1,11 @@
-# Project 2 — claims-tracker (project ref not yet recorded)
+# Project 2 — `nnkfnlrscywlosfwdlsw`
 
-**Placeholder.** Nothing here has been captured yet.
+**Standalone.** One app, `claims-tracker`. Shares nothing with
+[project 1](ipnajvgwtjrlecbqfwrh.md).
 
-**Rename this file** to `<project-ref>.md` once the ref is known — it is in the
-dashboard URL, `supabase.com/dashboard/project/<ref>` — and update the link in
-[`README.md`](README.md) and in
-[`ipnajvgwtjrlecbqfwrh.md`](ipnajvgwtjrlecbqfwrh.md).
+- API base: `https://nnkfnlrscywlosfwdlsw.supabase.co`
+- Postgres version: **UNKNOWN**
+- Last verified: **never** — nothing below the next heading has been captured.
 
 ## What is known
 
@@ -20,9 +20,9 @@ That is the entire extent of what is recorded. Everything below is unknown.
 
 ## What is unknown
 
-Everything: project ref, region, Postgres version, tables, policies, functions,
-views, grants, auth configuration, keys, where the app is deployed, and whether
-it has any public unauthenticated read path.
+Everything except the ref: region, Postgres version, tables, policies,
+functions, views, grants, auth configuration, keys, where the app is deployed,
+and whether it has any public unauthenticated read path.
 
 ## Why this one may deserve attention first
 

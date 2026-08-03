@@ -5,7 +5,7 @@
 
 - PostgreSQL 17.6
 - API base: `https://nnkfnlrscywlosfwdlsw.supabase.co`
-- Structure captured **2026-08-03** — complete. Auth not yet captured.
+- Structure and auth both captured **2026-08-03** — complete.
 
 ---
 
@@ -56,15 +56,25 @@ appears to mean. The cross-app risk does not arise — but see below.
 
 ## Open questions
 
-### 1. Who can obtain an authenticated session — capture block B
+### 1. Signups — the one thing still open ⚠️
 
-Not yet run. Every authenticated account can read all ~264 rows, so the
-protection on this data is exactly as strong as the answer to "who can sign
-up". If signups are open, the effective audience for this table is anyone who
-fills in a form.
+**Captured 2026-08-03:** one account, on the owner's own domain
+(`imetrobert.com`), email provider only, created 2026-07-20, has signed in.
 
-Block B reports account counts and providers. Whether signups are *open* is the
-one part still needing the dashboard: **Authentication → Providers**.
+So `auth.role() = 'authenticated'` currently resolves to exactly one person: the
+owner. Today the data is properly protected, and no migration is needed here.
+
+**But the policy does not say "the owner". It says "anyone with an account."**
+That set has one member right now, and nothing in the database keeps it that
+way. If signups are open, a stranger can create an account and immediately read
+all ~264 claims — names, services, dates, amounts, insurers — with no policy
+changed, no alert, and nothing in this repo becoming out of date. The capture
+above would still be accurate the moment before it happened.
+
+That makes this the single highest-value check on either project, and it is the
+one thing SQL cannot answer: **Authentication → Providers → "Allow new users to
+sign up"** in the dashboard. If it is on and only ever one person uses this app,
+turn it off — see [`../migrations/PLAN.md`](../migrations/PLAN.md).
 
 ### 2. `claims_dedupe_idx` does not deduplicate
 

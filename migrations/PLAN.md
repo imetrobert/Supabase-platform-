@@ -10,6 +10,32 @@ be specified correctly until step 1 is done.
 
 ---
 
+## 0. Check whether signups are open — both projects ⚠️
+
+**Status:** not started. **Effort:** two dashboard clicks. **No SQL, no
+migration.** Promoted above step 1 because it is the cheapest item here and
+currently the largest single unknown.
+
+**Authentication → Providers → "Allow new users to sign up"**, in each project.
+
+Why it outranks everything else on this page: both projects gate their data on
+`auth.role() = 'authenticated'`, which means *anyone with an account*, not *the
+owner*. Project 2 was captured on 2026-08-03 with exactly one account, the
+owner's own. That is a **snapshot of a set, not a constraint on it.** If signups
+are open, anyone can join that set at will and immediately read every row the
+policy protects — all ~264 claims on project 2, every invoice and every
+`survey_responses` row on project 1. No policy changes, nothing in this repo
+goes stale, and nothing announces it.
+
+If each project is only ever used by its owner, turning signups off costs
+nothing and removes that path entirely. It is not a substitute for step 2 —
+scoping policies to an owner is still the correct fix — but it is a one-click
+mitigation available today, where step 2 needs schema changes and testing.
+
+Record the answer per project in the inventory files either way. "Signups are
+off" is a fact worth having written down; so is "signups are on, deliberately,
+because X".
+
 ## 1. Inventory the rest of `ipnajvgwtjrlecbqfwrh`
 
 **Status:** not started. **Blocks:** everything else on this page.
@@ -22,10 +48,11 @@ Half of this project has never been looked at. `survey_responses`, `etf_*`,
 unknown. Section 4 of the query — RLS policies, plus the "RLS disabled" and "RLS
 on, no policies" check — is the part that matters most.
 
-Also needed, and dashboard-only: **whether signups are open on this project, and
-how many auth users exist.** That single fact decides how bad step 2 is. If
-signups are open, anyone on the internet can obtain an authenticated session and
-step 2 becomes urgent rather than merely correct.
+Capture block B answers **how many accounts exist and which providers are on**
+for this project — not yet run here, though it has been for project 2. Whether
+signups are *open* is step 0 above. Together those decide how urgent step 2 is:
+if signups are open, anyone can obtain an authenticated session, and step 2 goes
+from correct to urgent.
 
 ## 2. Scope `public.invoices` to its owner, not to "anyone logged in"
 

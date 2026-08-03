@@ -4,7 +4,7 @@ Captured 2026-08-03. **Complete** for structure.
 
 | File | Covers | Provenance |
 |---|---|---|
-| [`raw-capture-2026-08-03.txt`](raw-capture-2026-08-03.txt) | The whole project | Verbatim output of `queries/capture-one-shot.sql` section A |
+| [`raw-capture-2026-08-03.txt`](raw-capture-2026-08-03.txt) | The whole project, plus the auth picture | Verbatim output of `queries/capture-one-shot.sql`, sections A and B |
 | [`claims-tracker.sql`](claims-tracker.sql) | `public.claims` — the only object in the project | Reconstructed from the raw capture |
 
 The raw capture is the authority. `claims-tracker.sql` is a reconstruction from
@@ -22,7 +22,8 @@ a backup.
 
 ## Not captured
 
-- Auth: account counts, providers, whether signups are open.
+- Whether signups are open — dashboard only, and the open question that matters
+  most for this project. See the inventory file.
 - Storage buckets, Edge Functions, scheduled jobs, webhooks.
 - Whether the three policies are permissive or restrictive — see the note at the
   top of `claims-tracker.sql`.

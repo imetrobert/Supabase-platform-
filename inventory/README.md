@@ -5,7 +5,7 @@ One file per Supabase project, named after the project ref.
 | File | Project ref | Apps | Last verified |
 |---|---|---|---|
 | [`ipnajvgwtjrlecbqfwrh.md`](ipnajvgwtjrlecbqfwrh.md) | `ipnajvgwtjrlecbqfwrh` | **4, shared** — invoicing, jobs, tsx-etf-signal-notifier, Facebook-marketplace-generator | 2026-08-03, partial |
-| [`nnkfnlrscywlosfwdlsw.md`](nnkfnlrscywlosfwdlsw.md) | `nnkfnlrscywlosfwdlsw` | 1, standalone — claims-tracker | 2026-08-03, structure complete |
+| [`nnkfnlrscywlosfwdlsw.md`](nnkfnlrscywlosfwdlsw.md) | `nnkfnlrscywlosfwdlsw` | 1, standalone — claims-tracker | 2026-08-03, complete |
 
 **Two projects, confirmed by the owner 2026-08-03.** Repos not listed above
 (`imetrobert.github.io`, `aiwithrobert`, `aiwithrobert-brand-assets`) use no

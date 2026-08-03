@@ -71,3 +71,21 @@ CREATE INDEX claims_tax_year_idx ON public.claims USING btree (tax_year)
 (none)
 
 ===== END =====
+
+
+
+========================================================================
+Section B (auth), same run, 2026-08-03. Verbatim.
+========================================================================
+
+AUTH  |  2026-08-03 16:42:28.634288+00
+
+total accounts: 1
+signed in at least once: 1
+newest account created: 2026-07-20 01:11:28.920183+00
+
+----- ACCOUNTS BY EMAIL DOMAIN (no addresses) -----
+imetrobert.com: 1
+
+----- PROVIDERS -----
+email: 1

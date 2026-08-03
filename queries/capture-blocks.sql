@@ -68,7 +68,8 @@ from (
 select coalesce((
   select string_agg(
     tablename || '.' || policyname
-    || ' [' || cmd || ' to ' || array_to_string(roles, ',') || ']'
+    || ' [' || case when permissive = 'PERMISSIVE' then 'permissive' else 'RESTRICTIVE' end
+    || ' ' || cmd || ' to ' || array_to_string(roles, ',') || ']'
     || E'\n    USING ' || coalesce(qual, '(none)')
     || E'\n    CHECK ' || coalesce(with_check, '(none)'),
     E'\n\n' order by tablename, policyname)

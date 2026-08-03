@@ -31,6 +31,11 @@
 -- and a duplicate function overload. Output was ~4.6 KB for seven tables.
 -- Live projects are 17.6; these catalogs are stable across both.
 --
+-- Section 4 reports permissive vs RESTRICTIVE per policy. Restrictive is
+-- shouted because it is the surprising one: permissive policies compose with OR
+-- and any single pass grants access, restrictive compose with AND and must all
+-- pass, so a restrictive policy gates every other policy on the table.
+--
 -- Section B reports COUNTS and email DOMAINS only — never addresses, never user
 -- IDs — so its output is safe to paste back through a chat.
 
@@ -83,7 +88,8 @@ select
 || E'\n\n===== 4. RLS POLICIES =====\n'
 || coalesce((select string_agg(
      tablename || '.' || policyname
-     || ' [' || cmd || ' to ' || array_to_string(roles, ',') || ']'
+     || ' [' || case when permissive = 'PERMISSIVE' then 'permissive' else 'RESTRICTIVE' end
+     || ' ' || cmd || ' to ' || array_to_string(roles, ',') || ']'
      || E'\n    USING ' || coalesce(qual, '(none)')
      || E'\n    CHECK ' || coalesce(with_check, '(none)'),
      E'\n\n' order by tablename, policyname)

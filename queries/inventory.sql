@@ -110,6 +110,11 @@ order by tablename;
 -- The important read. For each policy ask: does this predicate actually
 -- identify the caller, or does it only describe the row?
 --
+-- Also check permissive vs RESTRICTIVE. Permissive policies compose with OR —
+-- any one passing grants access. Restrictive compose with AND and must ALL
+-- pass. A restrictive policy sitting among permissive ones is easy to misread
+-- as one more grant when it is actually a gate on every other policy.
+--
 -- `using (some_column is not null)` and `using (auth.role() = 'authenticated')`
 -- are both row descriptions. Neither ties the row to the person asking. On a
 -- shared project the second one means every app's users share one trust
@@ -119,7 +124,8 @@ select
   tablename as "table",
   string_agg(
     policyname
-      || ' [' || cmd || ' to ' || array_to_string(roles, ',') || ']'
+      || ' [' || case when permissive = 'PERMISSIVE' then 'permissive' else 'RESTRICTIVE' end
+      || ' ' || cmd || ' to ' || array_to_string(roles, ',') || ']'
       || coalesce(E'\n  USING ' || qual, '')
       || coalesce(E'\n  WITH CHECK ' || with_check, ''),
     E'\n' order by policyname

@@ -10,6 +10,10 @@
 -- horizontal scrolling. Sections are ordered cheapest-first: section 1 alone is
 -- enough to know what exists.
 --
+-- If you are working from a phone through the Supabase AI chat, use
+-- ./capture-blocks.sql instead — same information, but each block returns a
+-- single text cell that is one copy action rather than a table to scroll.
+--
 -- READ-ONLY. Nothing here writes, locks, or changes anything.
 --
 -- VERIFIED 2026-08-03: every section was run against a throwaway PostgreSQL

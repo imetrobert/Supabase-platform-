@@ -19,7 +19,7 @@ six months.
 |---|---|
 | [`inventory/`](inventory/) | Which app uses which project, tables, and keys |
 | [`schema/`](schema/) | A structure snapshot per project, captured from catalog queries |
-| [`queries/`](queries/) | The catalog queries that produce those snapshots |
+| [`queries/`](queries/) | The catalog queries that produce those snapshots — start with [`capture-one-shot.sql`](queries/capture-one-shot.sql) |
 | [`migrations/`](migrations/) | The plan, and the log of what has actually been run |
 | [`policies/`](policies/) | Patterns new apps should follow by default |
 
@@ -56,6 +56,7 @@ Started 2026-08-03. This is a first pass, deliberately partial:
   guessed at.
 - **Project 2 has never been looked at at all.**
 
-Filling those gaps means running [`queries/inventory.sql`](queries/inventory.sql)
-and committing the output. See [`inventory/README.md`](inventory/README.md) for
+Filling those gaps means running
+[`queries/capture-one-shot.sql`](queries/capture-one-shot.sql) against each
+project and committing the output. See [`inventory/README.md`](inventory/README.md) for
 what to do with the results.

@@ -1,6 +1,10 @@
 -- Capture blocks — one query per block, for pasting into the Supabase SQL editor
 -- or its AI chat one at a time.
 --
+-- PREFER ./capture-one-shot.sql — it carries all of this in a single statement
+-- and is far fewer pastes. Keep these blocks for when one section errors, or
+-- when you want to re-capture just one part without re-running everything.
+--
 -- Same information as inventory.sql, shaped differently. inventory.sql returns
 -- normal result tables and is better on a laptop. These return ONE text column
 -- in ONE row, so the whole answer is a single copy on a phone and survives being

@@ -45,6 +45,29 @@ Moving the database from the old project to the new one, so the old project can 
 > projects have no downloadable backup, so the old project is the only fallback until
 > then.
 >
+> ## Access control — 2026-08-09
+>
+> Migrating into a shared project turned out to be the smaller half of the job. The
+> target hosts six apps and three accounts, and every table except `claims`, `profiles`
+> and `cartmatch_*` was readable — and on eleven of them writable — by all three.
+>
+> All 22 tables are now behind per-app grants; see `app_access_pattern.sql` for the model
+> and `verify_access.sql` for the proof. The audit query returns no rows: nothing is
+> reachable by a logged-in account that has not been granted that app.
+>
+> Still open, in order:
+>
+> 1. Per-user rows for `job`. It is gated but not yet row-scoped, which is correct while
+>    it has one user and wrong the moment it has two. Blocked on knowing what generates
+>    `job_matches` — that writer has to set `user_id` or new matches arrive owned by
+>    nobody.
+> 2. The admin page at `access.imetrobert.com` — grants and revokes without SQL. Needs a
+>    `list_app_users()` function first, since `auth.users` is not reachable through the
+>    API.
+> 3. Merge `claude/supabase-db-migration-6lqrhw` on Facebook-marketplace-generator, which
+>    moves that app off its hardcoded email allowlist. Safe now that `profiles` carries
+>    the grant.
+>
 > Unrelated and still open: `claims-tracker/index.html` carries a live Google Gemini API
 > key in plaintext in a public repository.
 >

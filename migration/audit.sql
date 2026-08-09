@@ -46,22 +46,38 @@ where n.nspname = 'public' and c.relkind in ('v', 'm')
 order by 1;
 
 
--- 4. Anything the anonymous role can read.
---    anon is the publishable key, which ships in public HTML. Whatever appears
---    here is readable by anyone who visits any of these sites. A deliberately
---    public endpoint may legitimately appear — but it must be a deliberate
---    decision, made once, and not a leftover grant.
+-- 4. Anything anon can read that nothing will then filter.
+--
+--    NOT simply "what can anon select". Supabase grants table-level SELECT to
+--    anon and authenticated across public by default and leans on RLS to filter
+--    the rows, so a bare privilege check returns almost every relation and
+--    teaches you to skim past it. A check that always fires is not a check.
+--
+--    What actually matters is a grant with nothing behind it: a table with RLS
+--    switched off, or a view that does not defer to the caller. Either way the
+--    grant is the only gate, and anon is the publishable key that ships in
+--    public HTML.
+--
+--    This is precisely the shape invoices_et had.
+--
+--    c.oid rather than 'public.' || relname: has_table_privilege re-parses a
+--    text name through the search path, which on this project failed with a
+--    misleading "relation public.pg_stat_statements_info does not exist" — an
+--    extension artifact, nothing being audited, but it took the check out
+--    entirely. The oid form cannot hit it.
 
--- Note the c.oid rather than a constructed 'public.' || relname string.
--- has_table_privilege re-parses a text name and resolves it through the search
--- path, which failed on this project with a misleading "relation
--- public.pg_stat_statements_info does not exist" — an extension artifact, not
--- anything being audited. The oid form skips resolution and cannot hit it.
-
-select c.relname as anon_can_read, c.relkind
+select c.relname as unprotected_and_readable_by_anon,
+       case when c.relkind = 'r' then 'table with RLS disabled'
+            else 'view without security_invoker' end as why
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'public' and c.relkind in ('r', 'v', 'm')
+where n.nspname = 'public'
   and has_table_privilege('anon', c.oid, 'SELECT')
+  and (
+    (c.relkind = 'r' and not c.relrowsecurity)
+    or (c.relkind in ('v','m')
+        and coalesce((select option_value from pg_options_to_table(c.reloptions)
+                      where option_name = 'security_invoker'), 'false') not in ('true','on'))
+  )
 order by 1;
 
 

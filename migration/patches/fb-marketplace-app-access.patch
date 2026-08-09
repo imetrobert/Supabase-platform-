@@ -1,0 +1,586 @@
+From 4588cd54f65484b99f4c044b5b28880ab28ea077 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 9 Aug 2026 18:32:21 +0000
+Subject: [PATCH] Grant access from the shared project instead of a list in
+ this repo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Who may use this app was a hardcoded array of email addresses in js/config.js,
+checked in the browser. Inviting a seller meant editing that file and pushing;
+revoking meant another commit. And the check was the only one there was, since
+the profiles policies asked solely whether a row belonged to the caller — so
+any account on this shared Supabase project could create a seller profile here.
+
+Access now comes from the project's app_access table, via has_app_access().
+The same grant is checked in two places: the browser, so a refused visitor gets
+a clear message, and inside the row level security policies on profiles, which
+is the boundary that actually holds. Granting or revoking is a row, and takes
+effect on the next page load.
+
+The policies follow the shape used by every app on this project: the app grant,
+then either the app_admin role or ownership of the row. Reads widen for an
+app admin; writes stay ownership-only, so nobody can alter a profile that is
+not theirs.
+
+The browser check fails closed. An unreachable project refuses entry rather
+than admitting someone the database would then refuse to serve any data to.
+
+Tests: the harness answers the access RPC so suites can drive the app, and the
+invite suite covers a granted account, an ungranted one, and a failed check.
+The case that used to assert an empty list left the app open is gone with the
+list itself; absence of a grant is never an invitation.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FGMYobMquMrQE2MB2QEnBW
+---
+ README.md              | 56 +++++++++++++++++++++++++++++-------------
+ js/app.js              | 25 ++++++++++++-------
+ js/auth.js             | 32 ++++++++++++++++++++++++
+ js/config.js           | 26 +++++++++-----------
+ supabase/profiles.sql  | 35 ++++++++++++++++++++++----
+ tests/auth.test.mjs    | 14 ++++++++---
+ tests/harness.mjs      | 33 ++++++++++++++++---------
+ tests/invite.test.mjs  | 51 +++++++++++++++++++++++---------------
+ tests/profile.test.mjs |  8 +++---
+ 9 files changed, 195 insertions(+), 85 deletions(-)
+
+diff --git a/README.md b/README.md
+index 7abe192..5480870 100644
+--- a/README.md
++++ b/README.md
+@@ -93,17 +93,29 @@ saving reports that it did not reach your account rather than claiming success.
+    users to sign up*, and turn off *Confirm email* unless you have working email set up.
+ 4. Send them the link. They pick their own username and password and are signed straight
+    in. Turn the sign-up switch back off afterwards.
++5. **Grant them this app.** Signing up creates an account on the project; it does not
++   admit them here. In **SQL Editor**, with the address they registered:
++
++   ```sql
++   insert into public.app_access (user_id, app, role)
++   select id, 'fb-marketplace', 'member'
++   from auth.users where email = 'seller@example.com'
++   on conflict (user_id, app) do nothing;
++   ```
++
++   Until that row exists the app turns them away and tells them who to ask.
+ 
+ The code check runs in the browser, so treat it as convenience rather than security —
+-the switch in Supabase is what actually opens and closes the door. An uninvited account
+-is worth little anyway: row-level security means they see only their own profile, and
+-without a Gemini key the app does nothing.
++the switch in Supabase is what actually opens and closes the door, and step 5 is what
++lets them past it. An account without a grant gets nothing: it cannot read or write a
++profile, because the same grant is checked by row-level security.
+ 
+ **Or by hand, if you prefer:**
+ 
+ 1. **Authentication → Users → Add user** in Supabase. Set an email and password, and
+    tick *Auto Confirm User* so they can sign in immediately.
+-2. Send them the URL and their password.
++2. Grant them the app with the `insert into public.app_access` statement above, then
++   send them the URL and their password.
+ 3. They sign in and are welcomed straight into the profile screen. Every personal
+    field starts blank — no inherited postal code — and the app will not generate a
+    listing until the essentials are filled in, so nobody can accidentally publish an
+@@ -127,21 +139,31 @@ that project. Whether it then sees anything depends on how each app authorises.
+ 
+ That is worth deciding deliberately before inviting anyone:
+ 
+-- **Separate project per app** is the only real isolation available to a static site.
+-  A user created for this app simply does not exist in the other project. The free tier
+-  covers two projects, and switching is two values in `js/config.js` plus running
+-  `supabase/profiles.sql` on the new project.
+-- **`ACCESS.allowedEmails`** in `js/config.js` limits who this app admits. It currently
+-  names the owner only, so **add an invited seller's address there and push before
+-  sending their link** — otherwise the app refuses them even with a valid invite. Leave
+-  the list empty to admit anyone on the project. It guards against an account for a sibling app
+-  wandering in, but the check runs in the browser and the accounts are still shared, so
+-  it does not protect the other apps.
++- **Per-app grants** are how this project answers it. The `app_access` table names which
++  user may use which app, and `supabase/profiles.sql` puts that grant *inside* the
++  row-level security policies — so an account without it cannot read or write seller
++  data even if it never loads this page. To invite someone:
++
++  ```sql
++  insert into public.app_access (user_id, app, role)
++  select id, 'fb-marketplace', 'member'
++  from auth.users where email = 'seller@example.com'
++  on conflict (user_id, app) do nothing;
++  ```
++
++  Revoking is the same statement as a `delete`. **Neither needs a commit or a deploy** —
++  the next page load picks it up. `js/config.js` only carries the app's id
++  (`APP.id = 'fb-marketplace'`), which is what a grant matches against.
+ - **"Allow new users to sign up"** in Supabase is the switch that genuinely opens and
+   closes registration, project-wide. Turn it on to invite, off afterwards.
++- **A separate project per app** is still the most complete isolation, since a user
++  created for this app would not exist in the other project at all. It is no longer the
++  *only* real option: with grants enforced in the policies, one project can host several
++  apps without their users reaching each other's data.
+ 
+-Nothing enforced in the browser is security. On a static site the only boundary the
+-database honours is row-level security, which is why profiles are protected by it.
++Nothing enforced in the browser is security — the check in `js/app.js` only exists to
++show a clear message instead of an app that cannot load anything. The boundary the
++database honours is row-level security, which is where the same grant is checked again.
+ 
+ ### Password resets
+ 
+@@ -245,7 +267,7 @@ npm test
+ 
+ One hundred and five checks across ten suites, driving a real browser against a stubbed Gemini and a
+ stubbed Supabase: the full photo flow, the video path (including that extracted frames
+-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up and the per-app access list, password reset and recovery, failure
++are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up, the per-app access grant and its fail-closed behaviour, password reset and recovery, failure
+ handling for bad keys, rate limits, cancellation and malformed responses, and the auth
+ gate including session refresh, expiry, and that the shipped config really does gate the site.
+ 
+diff --git a/js/app.js b/js/app.js
+index 0404784..901eea4 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -7,7 +7,7 @@
+  * Step 3  the finished listing, field by field, each one tap-to-copy
+  */
+ 
+-import { MEDIA, ADMINISTRATOR, INVITES, ACCESS } from './config.js';
++import { MEDIA, ADMINISTRATOR, INVITES, APP } from './config.js';
+ import * as profileStore from './profile.js';
+ import * as auth from './auth.js';
+ import * as gemini from './gemini.js';
+@@ -1095,7 +1095,7 @@ function wireApp() {
+ async function enterApp(user) {
+   // Checked here rather than at each call site, so no path into the app can
+   // skip it.
+-  if (auth.isEnabled() && user && !isAllowed(user)) return refuseAccess(user);
++  if (auth.isEnabled() && user && !(await isAllowed())) return refuseAccess(user);
+ 
+   show($('auth-view'), false);
+   show($('app-view'));
+@@ -1119,14 +1119,21 @@ async function enterApp(user) {
+ /**
+  * Whether this account is allowed into this particular app.
+  *
+- * The list guards against an account created for a sibling app wandering in.
+- * It cannot be the whole story: the check runs in the browser, and the users
+- * are shared across every app on the Supabase project either way.
++ * Answered by the Supabase project's shared access list rather than by anything
++ * shipped in this repository, so granting or revoking someone takes effect the
++ * next time they load the page — no commit, no deploy.
++ *
++ * Fails closed. If the project cannot be reached the answer is "no": the same
++ * grant is enforced by row level security on the seller's data, so letting
++ * someone in on a network error would only show them an app that cannot load
++ * or save anything.
+  */
+-function isAllowed(user) {
+-  const allowed = (ACCESS.allowedEmails || []).map((e) => e.trim().toLowerCase()).filter(Boolean);
+-  if (!allowed.length) return true;
+-  return allowed.includes(String(user?.email || '').trim().toLowerCase());
++async function isAllowed() {
++  try {
++    return await auth.hasAppAccess(APP.id);
++  } catch {
++    return false;
++  }
+ }
+ 
+ /** Turn away an account that belongs to a different app on the same project. */
+diff --git a/js/auth.js b/js/auth.js
+index 767b4f3..6237254 100644
+--- a/js/auth.js
++++ b/js/auth.js
+@@ -39,6 +39,38 @@ export function getAccessToken() {
+ }
+ 
+ const authUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/auth/v1${p}`;
++const restUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/rest/v1${p}`;
++
++/**
++ * Whether the signed-in account has been granted this app.
++ *
++ * Asks the shared `has_app_access()` function on the Supabase project, which
++ * reads the same `app_access` table the row level security policies use — so
++ * the answer here and the answer the database enforces cannot drift apart.
++ *
++ * Throws rather than returning false when the call itself fails, so the caller
++ * decides what an unreachable project means. It must not be read as "allowed".
++ */
++export async function hasAppAccess(appId) {
++  // No credentials configured means the whole gate is off, matching isEnabled().
++  if (!isEnabled()) return true;
++  if (!session?.accessToken) return false;
++
++  const response = await fetch(restUrl('/rpc/has_app_access'), {
++    method: 'POST',
++    headers: {
++      'Content-Type': 'application/json',
++      apikey: SUPABASE.anonKey,
++      Authorization: `Bearer ${session.accessToken}`,
++    },
++    body: JSON.stringify({ app_name: appId }),
++  });
++  if (!response.ok) {
++    throw new Error(`Could not check app access (${response.status}).`);
++  }
++  // The function returns a bare JSON boolean.
++  return (await response.json()) === true;
++}
+ 
+ function loadSession() {
+   try {
+diff --git a/js/config.js b/js/config.js
+index d272e4c..f0691ef 100644
+--- a/js/config.js
++++ b/js/config.js
+@@ -32,25 +32,23 @@ export const SUPABASE = {
+ export const ADMINISTRATOR = 'Robert Simon';
+ 
+ /**
+- * Who may use THIS app.
++ * Which app this deployment is.
+  *
+  * Supabase Auth is per-project, not per-app: every site pointing at the same
+- * project shares one set of users. An account created here can therefore sign
+- * in to any other app on the same project, and this list does not change that
+- * — it only controls the door on this side.
++ * project shares one set of users. Access is therefore granted per app, in the
++ * project's `app_access` table, and this id is how a grant finds this app.
+  *
+- * The only real isolation available to a static site is a separate Supabase
+- * project per app. See the README. Treat this as a guard against accidents,
+- * not against someone determined.
++ * Inviting a seller is a row in that table, not an edit to this file — nothing
++ * here needs changing to add or remove someone.
+  *
+- * Empty means anyone with an account on the project can use this app.
++ * This is not merely a guard against accidents. The same grant is enforced by
++ * row level security on `profiles` (see supabase/profiles.sql), so an account
++ * without it cannot read or write seller data even if it bypasses the browser
++ * check. The check here exists to show a clear message rather than a broken
++ * screen.
+  */
+-export const ACCESS = {
+-  allowedEmails: [
+-    'robert@imetrobert.com',
+-    // Add each invited seller here BEFORE sending their link. Until an address
+-    // is on this list the app refuses it, even with a valid invite.
+-  ],
++export const APP = {
++  id: 'fb-marketplace',
+ };
+ 
+ /**
+diff --git a/supabase/profiles.sql b/supabase/profiles.sql
+index 333d168..31b63d2 100644
+--- a/supabase/profiles.sql
++++ b/supabase/profiles.sql
+@@ -18,23 +18,48 @@ create table if not exists public.profiles (
+ -- is not trusted to get that right.
+ alter table public.profiles enable row level security;
+ 
++-- Two conditions, not one.
++--
++-- `user_id = auth.uid()` keeps sellers out of each other's rows. On its own it
++-- is not enough here: this Supabase project is shared with several other apps,
++-- so every one of their users can sign in, and without the first condition any
++-- of them could create a seller profile in this app.
++--
++-- `has_app_access('fb-marketplace')` is the per-app grant, held in the
++-- project's `app_access` table. It is the same check js/app.js makes in the
++-- browser, so the two cannot drift apart — but this one is the real boundary.
++--
++-- `app_role(...) = 'app_admin'` lets someone running this app on the owner's
++-- behalf see every seller's profile. Note it applies to reads only: the write
++-- rules stay `user_id = auth.uid()`, so not even an app admin can create or
++-- alter a row belonging to someone else.
++--
++-- Requires has_app_access() and app_role() to exist on the project first.
++
+ drop policy if exists "profiles select policy" on public.profiles;
+ drop policy if exists "profiles insert policy" on public.profiles;
+ drop policy if exists "profiles update policy" on public.profiles;
+ drop policy if exists "profiles delete policy" on public.profiles;
+ 
+ create policy "profiles select policy" on public.profiles
+-  for select using (auth.uid() = user_id);
++  for select to authenticated
++  using (
++    public.has_app_access('fb-marketplace')
++    and (public.app_role('fb-marketplace') = 'app_admin' or auth.uid() = user_id)
++  );
+ 
+ create policy "profiles insert policy" on public.profiles
+-  for insert with check (auth.uid() = user_id);
++  for insert to authenticated
++  with check (public.has_app_access('fb-marketplace') and auth.uid() = user_id);
+ 
+ create policy "profiles update policy" on public.profiles
+-  for update using (auth.uid() = user_id)
+-             with check (auth.uid() = user_id);
++  for update to authenticated
++  using      (public.has_app_access('fb-marketplace') and auth.uid() = user_id)
++  with check (public.has_app_access('fb-marketplace') and auth.uid() = user_id);
+ 
+ create policy "profiles delete policy" on public.profiles
+-  for delete using (auth.uid() = user_id);
++  for delete to authenticated
++  using (public.has_app_access('fb-marketplace') and auth.uid() = user_id);
+ 
+ -- Deleting an account takes its profile with it, via the cascade above.
+ --
+diff --git a/tests/auth.test.mjs b/tests/auth.test.mjs
+index b773a4f..be0a1fb 100644
+--- a/tests/auth.test.mjs
++++ b/tests/auth.test.mjs
+@@ -59,6 +59,10 @@ async function newPage() {
+     }
+     if (url.pathname === '/auth/v1/recover') return json(200, {});
+     if (url.pathname === '/auth/v1/user' && method === 'PUT') return json(200, USER);
++    // This suite is about the sign-in gate, so the per-app grant is always
++    // present — a signed-in account still has to clear it before the app
++    // appears. Refusal and failure are covered in invite.test.mjs.
++    if (url.pathname === '/rest/v1/rpc/has_app_access') return json(200, true);
+     // A complete profile, so signing in lands in the app rather than on the
+     // first-run welcome. The profile itself is covered in profile.test.mjs.
+     if (url.pathname === '/rest/v1/profiles') {
+@@ -321,10 +325,12 @@ async function newPage() {
+     problems.push('A SECRET KEY HAS BEEN COMMITTED — rotate it immediately');
+   }
+ 
+-  // Locking the owner out of their own app is the easy mistake here.
+-  const access = await page.evaluate(async () => (await import('/js/config.js')).ACCESS);
+-  if (access.allowedEmails.length && !access.allowedEmails.includes('robert@imetrobert.com')) {
+-    problems.push(`the owner is not on the shipped access list: ${access.allowedEmails.join(', ')}`);
++  // The app id is how a grant in the project's app_access table finds this
++  // deployment. Ship the wrong one and every account is refused, including the
++  // owner's, because no grant can ever match it.
++  const app = await page.evaluate(async () => (await import('/js/config.js')).APP);
++  if (app?.id !== 'fb-marketplace') {
++    problems.push(`shipped app id is not the one grants are issued against: ${app?.id}`);
+   }
+   console.log('  ✓ the shipped config gates the site and carries a publishable key only');
+   await page.close();
+diff --git a/tests/harness.mjs b/tests/harness.mjs
+index c862d96..ffd1f05 100644
+--- a/tests/harness.mjs
++++ b/tests/harness.mjs
+@@ -59,20 +59,26 @@ export function configWithSupabase(url, anonKey) {
+ }
+ 
+ /**
+- * Serve config.js with the per-app access list emptied.
++ * Answer the shared per-app access check.
+  *
+- * That list names the real owner, so suites that sign in as invented accounts
+- * would otherwise be refused at the door. Access control itself is covered in
+- * invite.test.mjs, against a config with a list in it.
++ * The app asks the project's has_app_access() function on every entry, so a
++ * suite that leaves it unanswered would reach for the real Supabase project —
++ * and, because the check fails closed, be refused at the door.
++ *
++ * `allowed: false` stands in for an account that has no grant for this app.
++ * `allowed: 'error'` stands in for the project being unreachable, which must
++ * also refuse rather than wave the visitor through.
+  */
+-export async function stubOpenAccess(page) {
+-  await page.route('**/js/config.js', async (route) => {
+-    const source = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8');
+-    const opened = source.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, '$1[]');
+-    if (!/allowedEmails:\s*\[\]/.test(opened)) {
+-      throw new Error('could not empty the access list — config.js shape changed');
++export async function stubAppAccess(page, allowed = true) {
++  await page.route('**/rest/v1/rpc/has_app_access', async (route) => {
++    if (allowed === 'error') {
++      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+     }
+-    await route.fulfill({ status: 200, contentType: 'text/javascript', body: opened });
++    await route.fulfill({
++      status: 200,
++      contentType: 'application/json',
++      body: JSON.stringify(Boolean(allowed)),
++    });
+   });
+ }
+ 
+@@ -206,7 +212,7 @@ async function stubProfilesTable(page) {
+  *
+  * Call before `page.goto`.
+  */
+-export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE } = {}) {
++export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE, appAccess = true } = {}) {
+   await page.addInitScript((who) => {
+     localStorage.setItem('fbmg.session', JSON.stringify({
+       accessToken: 'test-access-token',
+@@ -218,6 +224,9 @@ export async function signIn(page, email = 'robert@imetrobert.com', { profile =
+     }));
+   }, email);
+   await stubProfilesTable(page);
++  // The app checks its per-app grant before showing anything, so a seeded
++  // session is not enough on its own.
++  await stubAppAccess(page, appAccess);
+   // A usable profile by default; pass `{ profile: null }` to test a new account.
+   if (profile) profileStore(page)[email] = profile;
+ }
+diff --git a/tests/invite.test.mjs b/tests/invite.test.mjs
+index 1ab880a..6f93ab6 100644
+--- a/tests/invite.test.mjs
++++ b/tests/invite.test.mjs
+@@ -23,9 +23,12 @@ const CODE_HASH = crypto.createHash('sha256').update(CODE).digest('hex');
+  * Serve config.js with the Supabase stub and an invite hash injected, so the
+  * app runs exactly as it would with a code configured.
+  */
+-// The access list defaults to empty here so the invite checks are about
+-// invites; the three that are about access pass their own list.
+-async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
++// Access is granted by the project, not by this repository, so the stub answers
++// has_app_access() directly. It defaults to allowed here so the invite checks
++// are about invites; the three that are about access pass their own answer.
++// `appAccess: 'error'` makes that call fail, standing in for an unreachable
++// project.
++async function newPage({ codeHash = CODE_HASH, appAccess = true } = {}) {
+   const page = await browser.newPage();
+   watchForErrors(page, problems);
+   const hits = [];
+@@ -36,13 +39,6 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+     if (codeHash && !body.includes(codeHash)) {
+       throw new Error('could not inject the invite hash — config.js shape changed');
+     }
+-    {
+-      const list = JSON.stringify(allowedEmails);
+-      body = body.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, `$1${list}`);
+-      if (!body.includes(list)) {
+-        throw new Error('could not inject the access list — config.js shape changed');
+-      }
+-    }
+     await route.fulfill({ status: 200, contentType: 'text/javascript', body });
+   });
+ 
+@@ -64,6 +60,10 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+         user: { id: body.email, email: body.email },
+       });
+     }
++    if (url.pathname === '/rest/v1/rpc/has_app_access') {
++      if (appAccess === 'error') return json(500, {});
++      return json(200, Boolean(appAccess));
++    }
+     if (url.pathname === '/rest/v1/profiles') {
+       return json(200, method === 'GET' ? [{ data: TEST_PROFILE }] : []);
+     }
+@@ -201,7 +201,7 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+ 
+ /* 7 — an account for a sibling app is turned away from this one. */
+ {
+-  const { page } = await newPage({ allowedEmails: ['robert@imetrobert.com', 'sheldon@example.com'] });
++  const { page } = await newPage({ appAccess: false });
+   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+ 
+@@ -214,20 +214,20 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+   await page.waitForSelector('#auth-error:not([hidden])', { timeout: 6000 });
+ 
+   if (await page.locator('#app-view').isVisible()) {
+-    problems.push('an account outside the access list got into the app');
++    problems.push('an account with no grant for this app got in');
+   }
+   const message = await page.locator('#auth-error').textContent();
+   if (!message.includes('does not have access')) problems.push(`unclear refusal: "${message}"`);
+   if (!message.includes('Robert Simon')) problems.push('the refusal does not say who to ask');
+   const session = await page.evaluate(() => localStorage.getItem('fbmg.session'));
+   if (session) problems.push('the refused account was left signed in');
+-  console.log('  ✓ an account outside the access list is refused and signed back out');
++  console.log('  ✓ an account with no grant is refused and signed back out');
+   await page.close();
+ }
+ 
+-/* 8 — a listed account is let in as normal. */
++/* 8 — a granted account is let in as normal. */
+ {
+-  const { page } = await newPage({ allowedEmails: ['sheldon@example.com'] });
++  const { page } = await newPage({ appAccess: true });
+   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+   await page.fill('#signup-email', 'sheldon@example.com');
+@@ -235,21 +235,32 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+   await page.fill('#signup-confirm', 'a-valid-password');
+   await page.click('#signup-form button[type="submit"]');
+   await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
+-  console.log('  ✓ a listed account is let in');
++  console.log('  ✓ a granted account is let in');
+   await page.close();
+ }
+ 
+-/* 9 — an empty list keeps the app open to everyone on the project. */
++/* 9 — an unreachable project refuses rather than waving the visitor through.
++ *
++ * The check that used to live here — "an empty allow list leaves the app open"
++ * — no longer exists: access is a grant in the database, and its absence is
++ * never an invitation. What matters now is which way the door swings when the
++ * answer cannot be fetched at all. */
+ {
+-  const { page } = await newPage({ allowedEmails: [] });
++  const { page } = await newPage({ appAccess: 'error' });
+   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+   await page.fill('#signup-email', 'anyone@example.com');
+   await page.fill('#signup-password', 'a-valid-password');
+   await page.fill('#signup-confirm', 'a-valid-password');
+   await page.click('#signup-form button[type="submit"]');
+-  await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
+-  console.log('  ✓ an empty list leaves the app open, as documented');
++  await page.waitForSelector('#auth-error:not([hidden])', { timeout: 6000 });
++
++  if (await page.locator('#app-view').isVisible()) {
++    problems.push('a failed access check let the visitor in');
++  }
++  const session = await page.evaluate(() => localStorage.getItem('fbmg.session'));
++  if (session) problems.push('the refused account was left signed in');
++  console.log('  ✓ an unreachable access check fails closed');
+   await page.close();
+ }
+ 
+diff --git a/tests/profile.test.mjs b/tests/profile.test.mjs
+index a94c51a..a3887dc 100644
+--- a/tests/profile.test.mjs
++++ b/tests/profile.test.mjs
+@@ -5,7 +5,7 @@
+  */
+ import {
+   serve, launch, watchForErrors, report, signIn, profileStore, TEST_PROFILE,
+-  stubGemini, asGeminiReply, stubOpenAccess,
++  stubGemini, asGeminiReply, stubAppAccess,
+ } from './harness.mjs';
+ import fs from 'node:fs';
+ 
+@@ -56,7 +56,7 @@ async function newPage({ profile = null, blank = false, account = 'robert@imetro
+   const page = await browser.newPage();
+   watchForErrors(page, problems);
+   // These suites sign in as invented accounts; the real list names the owner.
+-  await stubOpenAccess(page);
++  await stubAppAccess(page);
+   await signIn(page, account, { profile: blank ? null : overProfile(profile) });
+   await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
+   await stubGemini(page, (route) => {
+@@ -275,7 +275,7 @@ async function runListing(page) {
+   const context = await browser.newContext();
+   const page = await context.newPage();
+   watchForErrors(page, problems);
+-  await stubOpenAccess(page);
++  await stubAppAccess(page);
+   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
+     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
+ 
+@@ -565,7 +565,7 @@ async function runListing(page) {
+ {
+   const page = await browser.newPage();
+   watchForErrors(page, problems);
+-  await stubOpenAccess(page);
++  await stubAppAccess(page);
+   await signIn(page, 'sheldon@example.com', { profile: null });
+   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
+     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
+-- 
+2.43.0
+

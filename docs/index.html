@@ -84,6 +84,12 @@
   .seg button:first-child { border-left: none; }
   .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .seg.platform button[aria-pressed="true"] { background: var(--warn); color: #1b1400; }
+  /* "no access" is the resting state, not an achievement. Painting it like a
+     granted role makes an empty row as loud as a full one, and the page stops
+     being scannable — which is most of what it is for. */
+  .seg button.off[aria-pressed="true"] {
+    background: var(--line); color: var(--muted); font-weight: 600;
+  }
 
   .note { font-size: 13px; padding: 10px 12px; border-radius: 9px; margin-top: 12px; }
   .note.err { background: var(--warn-bg); color: var(--danger); }
@@ -299,8 +305,11 @@ function segment(userId, app, current, choices, isPlatform) {
   for (const [value, label] of choices) {
     const button = document.createElement('button');
     button.textContent = label;
-    button.setAttribute('aria-pressed', String(current === value));
-    button.addEventListener('click', () => change(userId, app, value, label));
+    const selected = current === value;
+    button.setAttribute('aria-pressed', String(selected));
+    if (value === null) button.classList.add('off');
+    // Re-tapping the current setting is a no-op rather than a needless write.
+    if (!selected) button.addEventListener('click', () => change(userId, app, value, label));
     seg.appendChild(button);
   }
   return seg;

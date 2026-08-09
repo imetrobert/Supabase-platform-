@@ -66,3 +66,39 @@ select seq, label, result from _probe order by seq;
 --
 -- Result on 2026-08-09: A=264 B=true C=1 D=1 E=1 F=0 G=264
 -- H=15a439699d3966dee7aaffbae7cec639
+
+
+-- ---------------------------------------------------------------------------
+-- Variant for a PERSONAL table
+--
+-- Two differences from the version above, both of which will bite if copied
+-- carelessly.
+--
+-- First, a refused INSERT does not return zero rows — an RLS WITH CHECK
+-- violation RAISES. Unhandled, it aborts the whole script and you lose every
+-- result collected so far. Wrap it:
+--
+--   do $$
+--   begin
+--     insert into public.profiles (user_id, data) values (auth.uid(), '{"probe":true}'::jsonb);
+--     insert into _probe values (6,'other user inserts (want blocked)','ALLOWED — PROBLEM');
+--   exception when others then
+--     insert into _probe values (6,'other user inserts (want blocked)','blocked (' || sqlerrm || ')');
+--   end $$;
+--
+-- A refused SELECT, DELETE or UPDATE is the opposite: RLS filters the rows away
+-- silently, so those are counted rather than caught.
+--
+-- Second, clean up by content rather than by trusting the refusal:
+--   delete from public.profiles where data ? 'probe';
+--
+-- Run this against every app whose tests stub the access check. A static-site
+-- suite can prove the browser gate and its fail-closed behaviour; it can never
+-- prove the policy, because it never speaks to Postgres.
+--
+-- Result on 2026-08-09, profiles / fb-marketplace, robert vs oboulian:
+--   owner: grant=true, reads 1, updates own row (rows=1)
+--   other: grant=false, reads 0,
+--          insert blocked — "new row violates row-level security policy
+--          for table profiles"
+--   profiles row count unchanged at 1 afterwards

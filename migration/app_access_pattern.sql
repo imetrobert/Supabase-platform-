@@ -171,6 +171,32 @@ grant  execute on function public.is_platform_admin()   to authenticated;
 --          or coalesce(qual,'') || coalesce(with_check,'') like '%auth.role()%')
 --   order by tablename, policyname;
 
+-- VIEWS. The query above is not enough on its own, and believing it was cost us
+-- a real hole. Views have no policies, so pg_policies cannot see them — and a
+-- view created without `security_invoker = true` reads its underlying tables
+-- with its OWNER's rights, bypassing their policies rather than inheriting
+-- them. Grant such a view to `authenticated` and every gated table beneath it
+-- is readable by anyone signed into any app on the project.
+--
+-- That is exactly what job_ranked did: every job_* table correctly gated, and
+-- all 1,337 rows readable straight through the view by accounts with no grant.
+--
+-- Every view MUST appear with security_invoker true, or be deliberately public
+-- and known to be:
+--   select c.relname,
+--          coalesce((select option_value from pg_options_to_table(c.reloptions)
+--                    where option_name = 'security_invoker'), 'NOT SET') as invoker,
+--          has_table_privilege('anon', 'public.' || quote_ident(c.relname), 'SELECT') as anon_can_read,
+--          pg_get_userbyid(c.relowner) as owner
+--   from pg_class c join pg_namespace n on n.oid = c.relnamespace
+--   where n.nspname = 'public' and c.relkind in ('v','m')
+--   order by 1;
+--
+-- Fixing one is `alter view public.<name> set (security_invoker = true)`, but
+-- check first that every table it reads has a SELECT policy the caller can
+-- satisfy. job_postings had none — the app only ever reached it through the
+-- view — so flipping the view without adding one would have emptied the app.
+
 -- Tables with RLS switched off entirely — worse than an open policy, since no
 -- policy audit would catch them. MUST RETURN NO ROWS:
 --   select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace

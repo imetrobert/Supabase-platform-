@@ -52,10 +52,16 @@ order by 1;
 --    public endpoint may legitimately appear — but it must be a deliberate
 --    decision, made once, and not a leftover grant.
 
+-- Note the c.oid rather than a constructed 'public.' || relname string.
+-- has_table_privilege re-parses a text name and resolves it through the search
+-- path, which failed on this project with a misleading "relation
+-- public.pg_stat_statements_info does not exist" — an extension artifact, not
+-- anything being audited. The oid form skips resolution and cannot hit it.
+
 select c.relname as anon_can_read, c.relkind
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind in ('r', 'v', 'm')
-  and has_table_privilege('anon', 'public.' || quote_ident(c.relname), 'SELECT')
+  and has_table_privilege('anon', c.oid, 'SELECT')
 order by 1;
 
 

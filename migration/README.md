@@ -27,11 +27,26 @@ Moving the database from the old project to the new one, so the old project can 
 >    No CSV, so `null` stayed `null` and the original UUIDs came across.
 > 5. Verified with an md5 checksum over every field of all 264 rows, computed identically
 >    on both projects: `15a439699d3966dee7aaffbae7cec639` on each side.
+> 6. Cut over: `index.html` repointed and merged to `main`, so
+>    <https://tax.imetrobert.com> now runs on the new project. Confirmed by
+>    `auth.users.last_sign_in_at` on the new project moving to the moment of the first
+>    login — the one signal page caching cannot fake.
+> 7. Verified the access boundary by impersonating both users at the database level
+>    (`verify_access.sql`): the owner reads 264 rows and can insert and update; a second
+>    account on the same project, fully authenticated, reads **0**. Deletes stay blocked,
+>    matching the old project. Checksum unchanged afterwards.
 >
-> Still open: repoint `claims-tracker/index.html` at the new project, update the
-> `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository secrets used by the keep-alive
-> workflow, then delete the old project. The old project's secret key was exposed in a
-> chat transcript during step 4 and has been rotated.
+> The old project's secret key was exposed in a chat transcript during step 4 and has
+> been deleted. The keep-alive workflow's `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository
+> secrets have been updated.
+>
+> **Only remaining step: delete the old project** (`nnkfnlrscywlosfwdlsw`), after roughly
+> a week of running on the new one. Deletion is instant and irreversible and free-tier
+> projects have no downloadable backup, so the old project is the only fallback until
+> then.
+>
+> Unrelated and still open: `claims-tracker/index.html` carries a live Google Gemini API
+> key in plaintext in a public repository.
 >
 > The scripts below remain valid for a terminal-based migration and are kept as-is.
 

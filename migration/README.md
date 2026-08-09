@@ -7,6 +7,34 @@ Moving the database from the old project to the new one, so the old project can 
 | Old | `nnkfnlrscywlosfwdlsw` | source — delete after this is done |
 | New | `ipnajvgwtjrlecbqfwrh` | target |
 
+> ## As built — 2026-08-09
+>
+> **The data migration is done and verified.** It was carried out through the Supabase
+> dashboard SQL Editor from a phone, not with the scripts below — those need a terminal.
+> What actually happened:
+>
+> 1. Inventoried the old project from the catalog: one table, `public.claims`, 264 rows,
+>    12 columns, 4 indexes, 3 RLS policies, no triggers/functions/buckets, one login.
+> 2. Recreated `claims` in the new project from that inventory (`schema_claims.sql`).
+> 3. Discovered the new project is **not** a fresh project — it hosts ~21 tables for
+>    several other apps and has **3 auth users**. The old project's policy
+>    (`auth.role() = 'authenticated'`) was safe there with one user and would have
+>    exposed all 264 claims to the other two accounts here. Built a per-app
+>    authorization layer instead — see `app_access_pattern.sql`.
+> 4. Moved the rows project-to-project with the `http` extension: the new project called
+>    the old project's PostgREST API with its secret key and inserted the JSON directly,
+>    guarded so it could only fire on HTTP 200, exactly 264 rows, and an empty target.
+>    No CSV, so `null` stayed `null` and the original UUIDs came across.
+> 5. Verified with an md5 checksum over every field of all 264 rows, computed identically
+>    on both projects: `15a439699d3966dee7aaffbae7cec639` on each side.
+>
+> Still open: repoint `claims-tracker/index.html` at the new project, update the
+> `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository secrets used by the keep-alive
+> workflow, then delete the old project. The old project's secret key was exposed in a
+> chat transcript during step 4 and has been rotated.
+>
+> The scripts below remain valid for a terminal-based migration and are kept as-is.
+
 **Short answer: yes, this is easy.** As far as the application code shows, the old
 project holds one table (`public.claims`) and one login. There are no storage buckets,
 no edge functions, no database functions and no foreign keys to untangle. The work is
@@ -96,7 +124,7 @@ Only needs the app login and the two publishable keys. Rebuilds the table from m
 reconstruction and copies the rows through the REST API.
 
 ```bash
-# 1. Create the table in the new project: paste fallback_schema_claims.sql into
+# 1. Create the table in the new project: paste schema_claims.sql into
 #    Dashboard -> SQL Editor -> Run. Read it first — the types are my best guess.
 
 # 2. Copy the rows.
@@ -159,7 +187,7 @@ with two databases standing in for the old and new project, both carrying the ro
 **non-superuser** role so that superuser-only statements fail the way they would on
 Supabase rather than silently passing.
 
-- `fallback_schema_claims.sql` applies cleanly and produces the table it describes.
+- `schema_claims.sql` (then the reconstructed draft it replaced) applies cleanly and produces the table it describes.
 - `migrate.sh dump` skips the platform schemas and picks up everything in `public` —
   including a table the app never references, which is the case that matters if there is
   more in your database than `index.html` reveals.

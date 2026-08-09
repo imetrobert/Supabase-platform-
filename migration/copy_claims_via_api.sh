@@ -4,7 +4,7 @@
 # login — no database password needed.
 #
 # This is the fallback path. It moves ROWS ONLY: the target table must already
-# exist (run fallback_schema_claims.sql first). Use migrate.sh instead if you can,
+# exist (run schema_claims.sql first). Use migrate.sh instead if you can,
 # since that also carries over types, defaults, indexes and RLS policies exactly.
 #
 # Usage:

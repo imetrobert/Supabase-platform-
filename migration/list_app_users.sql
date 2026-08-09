@@ -35,7 +35,30 @@ $$;
 revoke execute on function public.list_app_users() from public, anon;
 grant  execute on function public.list_app_users() to authenticated;
 
--- Check: as a platform admin this returns every account; impersonate anyone
--- else and it returns nothing.
+-- Checking it works
 --
---   select count(*) from public.list_app_users();
+-- Calling this bare in the SQL Editor returns 0, and that is correct, not a
+-- fault: the editor runs as `postgres` with no signed-in user, so auth.uid() is
+-- NULL and is_platform_admin() is false. The guard is doing its job. To see
+-- anything you have to say who you are.
+
+create temp table if not exists _chk(seq int, label text, result text);
+delete from _chk;
+
+select set_config('request.jwt.claims',
+  (select json_build_object('sub', id, 'role','authenticated')::text
+   from auth.users where email = 'robert@imetrobert.com'), false);
+insert into _chk select 1, 'platform admin sees users (want 3)',
+  count(*)::text from public.list_app_users();
+
+select set_config('request.jwt.claims',
+  (select json_build_object('sub', id, 'role','authenticated')::text
+   from auth.users where email = 'oboulian@gmail.com'), false);
+insert into _chk select 2, 'ordinary account sees users (want 0)',
+  count(*)::text from public.list_app_users();
+
+select set_config('request.jwt.claims', '', false);
+insert into _chk select 3, 'nobody signed in sees users (want 0)',
+  count(*)::text from public.list_app_users();
+
+select seq, label, result from _chk order by seq;

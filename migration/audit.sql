@@ -81,6 +81,22 @@ where n.nspname = 'public'
 order by 1;
 
 
+-- 5. The checks above are static analysis. The real question is what a caller
+--    actually gets, and only the database can answer that. Impersonate and
+--    count — see verify_access.sql for the full pattern:
+--
+--      select set_config('request.jwt.claims', '', false);
+--      set role anon;
+--      select count(*) from public.claims;    -- and invoices, profiles, ...
+--      reset role;
+--
+--    Run against anon, and against an account holding no grant for the app in
+--    question. Both must return 0.
+--
+--    Verified 2026-08-09 — anon reads 0 rows from claims, invoices,
+--    job_postings, profiles and cartmatch_retailer_reliability.
+
+
 -- Fixing a view found by check 3:
 --
 --   alter view public.<name> set (security_invoker = true);

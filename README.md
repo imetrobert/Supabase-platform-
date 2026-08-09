@@ -83,16 +83,24 @@ after changing its policies. Note that a refused `INSERT` **raises** rather than
 returning zero rows, so an unwrapped probe aborts the script and discards every result
 before it; `SELECT`, `UPDATE` and `DELETE` fail the opposite way, filtering silently.
 
-Nothing should ever appear in this, on any table:
+`migration/audit.sql` is the standing check — four queries, all of which should come
+back empty. Run it after touching any policy, view or grant.
 
-```sql
-select tablename, policyname, cmd, coalesce(qual, with_check) as expr
-from pg_policies
-where schemaname = 'public'
-  and (coalesce(qual, with_check, 'true') = 'true'
-       or coalesce(qual,'') || coalesce(with_check,'') like '%auth.role()%')
-order by tablename, policyname;
-```
+**Checking policies is not enough, and believing it was cost us two real holes.** Views
+have no policies, so a policy audit cannot see them; and a view created without
+`security_invoker` reads its tables with its *owner's* rights, bypassing the policies
+beneath it rather than inheriting them.
+
+- `job_ranked` was granted to `authenticated` with no `security_invoker`. Every `job_*`
+  table was correctly gated, and all 1,337 postings and match write-ups were readable
+  through the view by accounts with no `job` grant.
+- `invoices_et` was the same, **and granted to `anon`** — so every invoice, with client
+  names, addresses and amounts, was readable by anyone holding the publishable key that
+  ships in public HTML. It also exposed `view_token`, so the tokens authorising public
+  invoice links leaked alongside the invoices.
+
+Both are fixed. The lesson is in `audit.sql`: gating tables is not the same as gating
+access.
 
 ## Open
 

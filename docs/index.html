@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Access Rights</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #16181d;
+    --muted: #6b7280;
+    --line: #e3e6ea;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --warn: #b45309;
+    --warn-bg: #fef3c7;
+    --danger: #b91c1c;
+    --ok: #047857;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #171a20;
+      --ink: #e8eaed;
+      --muted: #9aa1ab;
+      --line: #2a2f38;
+      --accent: #3b82f6;
+      --accent-ink: #0f1115;
+      --warn: #fbbf24;
+      --warn-bg: #3a2f10;
+      --danger: #f87171;
+      --ok: #34d399;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 14px 48px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  h1 { font-size: 20px; margin: 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px; margin-top: 12px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input {
+    width: 100%; padding: 11px 12px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: var(--bg); color: var(--ink);
+  }
+  button {
+    font: inherit; cursor: pointer; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    padding: 9px 13px;
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  button.link { border: none; background: none; color: var(--accent); padding: 4px 0; }
+  button:disabled { opacity: .55; cursor: default; }
+
+  .user { border-top: 1px solid var(--line); padding: 14px 0; }
+  .user:first-of-type { border-top: none; padding-top: 4px; }
+  .user-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .email { font-weight: 600; word-break: break-all; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px;
+    background: var(--warn-bg); color: var(--warn); font-weight: 600; white-space: nowrap;
+  }
+  .apps { margin-top: 10px; display: grid; gap: 7px; }
+  .app-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .app-name { font-size: 14px; }
+  .app-name small { display: block; color: var(--muted); font-size: 11.5px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+  .seg button {
+    border: none; border-radius: 0; padding: 7px 10px; font-size: 12.5px;
+    background: transparent; color: var(--muted); border-left: 1px solid var(--line);
+  }
+  .seg button:first-child { border-left: none; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .seg.platform button[aria-pressed="true"] { background: var(--warn); color: #1b1400; }
+
+  .note { font-size: 13px; padding: 10px 12px; border-radius: 9px; margin-top: 12px; }
+  .note.err { background: var(--warn-bg); color: var(--danger); }
+  .note.ok { color: var(--ok); }
+  .hidden { display: none !important; }
+  footer { margin-top: 22px; font-size: 12.5px; color: var(--muted); }
+  code { font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Access Rights</h1>
+    <span class="muted" id="whoami"></span>
+  </header>
+  <p class="muted" id="subtitle">Who may use which app on the shared Supabase project.</p>
+
+  <!-- Sign in -->
+  <section id="signin-view" class="card hidden">
+    <form id="signin-form">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <div style="margin-top:14px"><button class="primary" type="submit">Sign in</button></div>
+    </form>
+    <div id="signin-error" class="note err hidden"></div>
+  </section>
+
+  <!-- Grants -->
+  <section id="admin-view" class="hidden">
+    <div id="status" class="note hidden"></div>
+    <div class="card" id="users"></div>
+    <footer>
+      <p>Changes take effect the next time that person loads the app — no deploy needed.</p>
+      <p>Accounts are created in the Supabase dashboard or by self sign-up; this page cannot
+         create or delete them, because that needs a secret key and no secret key belongs in a
+         browser.</p>
+      <p><button class="link" id="signout">Sign out</button></p>
+    </footer>
+  </section>
+
+  <div id="boot" class="muted">Loading…</div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+ * Access Rights — grants for every app on the shared Supabase project.
+ *
+ * Static page, publishable key only. Everything it can do is decided by row
+ * level security: the app_access policies allow writes only to a platform
+ * admin, so this page has no power the database has not already granted the
+ * person signed into it. The is_platform_admin() check below is for showing a
+ * clear message, not for enforcement.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+const SUPABASE_URL = 'https://ipnajvgwtjrlecbqfwrh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go';
+
+/* The apps, in display order. Adding one here only changes this page — the
+ * grant itself is just a row, and the app's own policies decide what it means.
+ * Any app found in the data but missing here is appended automatically, so a
+ * forgotten entry can never hide an existing grant. */
+const APPS = [
+  { id: 'claims-tracker',  name: 'Claims Tracker',   note: 'tax.imetrobert.com' },
+  { id: 'invoicing',       name: 'Invoicing',        note: 'invoices + survey capture' },
+  { id: 'etf',             name: 'ETF Tracker',      note: 'holdings, watchlist, signals' },
+  { id: 'job',             name: 'Job Search',       note: 'jobs.imetrobert.com' },
+  { id: 'cartmatch',       name: 'Price Checker',    note: 'cartmatch' },
+  { id: 'fb-marketplace',  name: 'Marketplace Ads',  note: 'fbmarket.imetrobert.com' },
+];
+
+/* 'platform' is not an app. A row for it with role app_admin is what lets
+ * someone use this page at all, so it is shown apart and offers only on/off —
+ * "member of the access system" would mean nothing. */
+const PLATFORM = 'platform';
+
+const SESSION_KEY = 'access-rights.session';
+const REFRESH_MARGIN = 60;
+
+const $ = (id) => document.getElementById(id);
+let session = null;
+let users = [];
+let grants = [];
+
+/* ── Supabase REST ───────────────────────────────────────────────────── */
+
+const authUrl = (p) => `${SUPABASE_URL}/auth/v1${p}`;
+const restUrl = (p) => `${SUPABASE_URL}/rest/v1${p}`;
+
+function headers(extra = {}) {
+  return {
+    'Content-Type': 'application/json',
+    apikey: SUPABASE_ANON_KEY,
+    ...(session ? { Authorization: `Bearer ${session.accessToken}` } : {}),
+    ...extra,
+  };
+}
+
+async function call(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(body?.message || body?.msg || body?.error_description || `Request failed (${response.status})`);
+  }
+  return body;
+}
+
+const rpc = (fn, args = {}) =>
+  call(restUrl(`/rpc/${fn}`), { method: 'POST', headers: headers(), body: JSON.stringify(args) });
+
+/* ── Session ─────────────────────────────────────────────────────────── */
+
+function saveSession(next) {
+  session = next;
+  if (next) localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+  else localStorage.removeItem(SESSION_KEY);
+}
+
+function toSession(data) {
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: data.expires_at ?? Math.floor(Date.now() / 1000) + (data.expires_in ?? 3600),
+    user: data.user ?? null,
+  };
+}
+
+async function signIn(email, password) {
+  const data = await call(authUrl('/token?grant_type=password'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+    body: JSON.stringify({ email: email.trim(), password }),
+  });
+  saveSession(toSession(data));
+}
+
+async function refreshSession() {
+  if (!session?.refreshToken) return false;
+  try {
+    const data = await call(authUrl('/token?grant_type=refresh_token'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: session.refreshToken }),
+    });
+    saveSession(toSession(data));
+    return true;
+  } catch {
+    saveSession(null);
+    return false;
+  }
+}
+
+async function signOut() {
+  if (session?.accessToken) {
+    await call(authUrl('/logout'), { method: 'POST', headers: headers(), body: '{}' }).catch(() => {});
+  }
+  saveSession(null);
+  location.reload();
+}
+
+/* ── Data ────────────────────────────────────────────────────────────── */
+
+async function loadEverything() {
+  // Both are gated by is_platform_admin() in the database: the function returns
+  // an empty set to anyone else, and the app_access policy hides other people's
+  // rows. Nothing here depends on this page being honest.
+  [users, grants] = await Promise.all([
+    rpc('list_app_users'),
+    call(restUrl('/app_access?select=user_id,app,role,granted_at,granted_by'), { headers: headers() }),
+  ]);
+}
+
+const grantFor = (userId, app) => grants.find((g) => g.user_id === userId && g.app === app) || null;
+
+async function setRole(userId, app, role) {
+  if (role === null) {
+    await call(restUrl(`/app_access?user_id=eq.${userId}&app=eq.${encodeURIComponent(app)}`), {
+      method: 'DELETE',
+      headers: headers(),
+    });
+  } else {
+    await call(restUrl('/app_access'), {
+      method: 'POST',
+      headers: headers({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify({
+        user_id: userId,
+        app,
+        role,
+        granted_by: session.user?.id ?? null,
+      }),
+    });
+  }
+  await loadEverything();
+  render();
+}
+
+/* ── Rendering ───────────────────────────────────────────────────────── */
+
+function appList() {
+  const known = new Set(APPS.map((a) => a.id));
+  const extra = [...new Set(grants.map((g) => g.app))]
+    .filter((id) => id !== PLATFORM && !known.has(id))
+    .map((id) => ({ id, name: id, note: 'not listed in this page' }));
+  return [...APPS, ...extra];
+}
+
+function segment(userId, app, current, choices, isPlatform) {
+  const seg = document.createElement('div');
+  seg.className = 'seg' + (isPlatform ? ' platform' : '');
+  for (const [value, label] of choices) {
+    const button = document.createElement('button');
+    button.textContent = label;
+    button.setAttribute('aria-pressed', String(current === value));
+    button.addEventListener('click', () => change(userId, app, value, label));
+    seg.appendChild(button);
+  }
+  return seg;
+}
+
+async function change(userId, app, role, label) {
+  const isSelf = userId === session.user?.id;
+
+  // Removing your own platform admin cannot be undone from this page — there
+  // would be nobody left who can write to app_access. Recovery would mean the
+  // SQL editor. Refuse rather than explain afterwards.
+  if (isSelf && app === PLATFORM && role === null) {
+    return note('Removing your own admin rights would lock you out of this page. '
+      + 'Grant a second admin first, or do it from the Supabase SQL editor.', 'err');
+  }
+  if (app === PLATFORM && role === 'app_admin' && !isSelf) {
+    const who = users.find((u) => u.id === userId)?.email || 'that account';
+    if (!confirm(`Make ${who} an admin of this page?\n\nThey will be able to grant and revoke `
+      + `access for every app, including granting themselves access to your data.`)) return;
+  }
+
+  note('Saving…', 'ok');
+  try {
+    await setRole(userId, app, role);
+    note(`Saved — ${label}.`, 'ok');
+  } catch (error) {
+    note(error.message, 'err');
+  }
+}
+
+function note(message, kind) {
+  const el = $('status');
+  el.textContent = message;
+  el.className = `note ${kind}`;
+  el.classList.remove('hidden');
+}
+
+function render() {
+  const container = $('users');
+  container.innerHTML = '';
+
+  for (const user of users) {
+    const platform = grantFor(user.id, PLATFORM);
+    const apps = appList();
+    const held = apps.filter((a) => grantFor(user.id, a.id));
+
+    const block = document.createElement('div');
+    block.className = 'user';
+
+    const head = document.createElement('div');
+    head.className = 'user-head';
+    const left = document.createElement('div');
+    left.innerHTML = `<span class="email"></span>`;
+    left.querySelector('.email').textContent = user.email;
+    if (platform?.role === 'app_admin') {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = 'admin';
+      badge.style.marginLeft = '7px';
+      left.appendChild(badge);
+    }
+    const summary = document.createElement('div');
+    summary.className = 'muted';
+    summary.textContent = held.length
+      ? `${held.length} app${held.length > 1 ? 's' : ''}`
+      : 'no access';
+    head.append(left, summary);
+
+    const meta = document.createElement('div');
+    meta.className = 'muted';
+    meta.style.marginTop = '2px';
+    meta.textContent = user.last_sign_in_at
+      ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}`
+      : 'never signed in';
+
+    const list = document.createElement('div');
+    list.className = 'apps';
+
+    for (const app of apps) {
+      const grant = grantFor(user.id, app.id);
+      const row = document.createElement('div');
+      row.className = 'app-row';
+      const name = document.createElement('div');
+      name.className = 'app-name';
+      name.innerHTML = '<span></span><small></small>';
+      name.querySelector('span').textContent = app.name;
+      name.querySelector('small').textContent = app.note;
+      row.append(name, segment(user.id, app.id, grant?.role ?? null, [
+        [null, 'None'], ['member', 'Member'], ['app_admin', 'Admin'],
+      ], false));
+      list.appendChild(row);
+    }
+
+    const platformRow = document.createElement('div');
+    platformRow.className = 'app-row';
+    platformRow.style.marginTop = '10px';
+    platformRow.style.paddingTop = '10px';
+    platformRow.style.borderTop = '1px dashed var(--line)';
+    const platformName = document.createElement('div');
+    platformName.className = 'app-name';
+    platformName.innerHTML = '<span></span><small></small>';
+    platformName.querySelector('span').textContent = 'Access Rights';
+    platformName.querySelector('small').textContent = 'can grant and revoke for everyone';
+    platformRow.append(platformName, segment(user.id, PLATFORM, platform?.role ?? null, [
+      [null, 'No'], ['app_admin', 'Admin'],
+    ], true));
+
+    block.append(head, meta, list, platformRow);
+    container.appendChild(block);
+  }
+}
+
+/* ── Boot ────────────────────────────────────────────────────────────── */
+
+function show(view) {
+  $('boot').classList.add('hidden');
+  $('signin-view').classList.toggle('hidden', view !== 'signin');
+  $('admin-view').classList.toggle('hidden', view !== 'admin');
+}
+
+async function enter() {
+  // Shown for clarity only — the database refuses the writes regardless.
+  const isAdmin = await rpc('is_platform_admin');
+  if (isAdmin !== true) {
+    saveSession(null);
+    show('signin');
+    $('signin-error').textContent =
+      'That account cannot manage access rights. Ask an administrator, or grant '
+      + 'platform/app_admin from the Supabase SQL editor.';
+    $('signin-error').classList.remove('hidden');
+    return;
+  }
+  $('whoami').textContent = session.user?.email || '';
+  await loadEverything();
+  render();
+  show('admin');
+}
+
+$('signin-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const error = $('signin-error');
+  error.classList.add('hidden');
+  try {
+    await signIn($('email').value, $('password').value);
+    await enter();
+  } catch (e) {
+    error.textContent = e.message;
+    error.classList.remove('hidden');
+  }
+});
+
+$('signout').addEventListener('click', signOut);
+
+(async function boot() {
+  try {
+    session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+  } catch { session = null; }
+
+  if (session && session.expiresAt - REFRESH_MARGIN <= Math.floor(Date.now() / 1000)) {
+    if (!(await refreshSession())) session = null;
+  }
+  if (!session) return show('signin');
+
+  try {
+    await enter();
+  } catch (e) {
+    saveSession(null);
+    show('signin');
+    $('signin-error').textContent = e.message;
+    $('signin-error').classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>

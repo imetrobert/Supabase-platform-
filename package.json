@@ -1,0 +1,13 @@
+{
+  "name": "supabase-platform",
+  "private": true,
+  "type": "module",
+  "description": "Access control for the shared Supabase project, and the page that manages it.",
+  "scripts": {
+    "test": "node tests/admin.test.mjs",
+    "serve": "node -e \"import('node:http').then(async ({default:h})=>{const fs=await import('node:fs'),p=await import('node:path');h.createServer((q,s)=>{const f=p.join('docs',q.url==='/'?'index.html':q.url.split('?')[0]);if(!fs.existsSync(f))return s.writeHead(404).end();s.writeHead(200,{'Content-Type':'text/html'});s.end(fs.readFileSync(f))}).listen(8080,()=>console.log('http://localhost:8080'))})\""
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

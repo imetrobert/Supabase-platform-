@@ -1,0 +1,388 @@
+From 30d6d10e554a720d55612e439e8513dae3d26fa1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 9 Aug 2026 20:51:16 +0000
+Subject: [PATCH] Stop dismissing a role from destroying its match and
+ application
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+job_matches and job_applications both declare `references job_postings(id) on
+delete cascade`, and dismissing deleted the posting row. So throwing a role
+away also threw away its match write-up, its application status and any
+generated cover letter. Dismiss something you had already applied to and your
+own pipeline entry went with it. The Supabase project is shared with five other
+apps, so the day a second person is granted 'job' it gets worse: the posting is
+one shared row, and one person dismissing a role would destroy everybody else's
+verdicts and applications for it.
+
+The delete was never what made dismissal work. The suppression row in
+job_dismissed does the whole job on both paths that matter: the list filters
+against it the moment it is written, so the card goes immediately, and the scan
+filters re-imported feed results against it, so the role never comes back.
+Neither ever consulted job_postings. Deleting the posting only tidied the table,
+at the cost of cascading through other people's data.
+
+Dismissed postings now stay in job_postings, inert — filtered out of every list
+and never re-scored. That costs some rows and nothing else.
+
+convergeLegacyFingerprints still deletes superseded duplicates, which is
+correct: it already checks job_applications and keeps anything with one
+attached.
+
+schema.sql was a landmine, and is the reason this commit touches more than two
+files. It is documented as safe to re-run, and re-running it would have undone
+today's work on the live project: every policy recreated as `using (true)`,
+which on a shared project means anyone with an account on any of the six apps;
+job_ranked recreated without security_invoker, reopening a bypass that had all
+1,337 postings and match write-ups readable by accounts with no grant; and the
+DELETE policy restored, making this same cascade reachable from the browser
+again. Its comment stated the belief that caused that hole — "views run with
+the definer's rights; the underlying tables are still RLS-protected" — which is
+backwards, and is why the view now carries security_invoker explicitly and says
+why. There is deliberately no DELETE policy on job_postings now: nothing in the
+browser deletes a posting, and with no policy nothing can.
+
+The policies depend on has_app_access() from the platform repo, so the file
+checks for it up front and refuses with an explanation rather than creating
+policies that reference a missing function and lock everyone out.
+
+Verified against a local Postgres with the platform layer in place: applies
+clean, is idempotent across two runs, produces seven policies all gated on
+has_app_access('job') and no DELETE policy, and leaves job_ranked with
+security_invoker true. Against a database without the platform layer it fails
+loudly and creates nothing. `npm run build` passes, which is the whole of this
+repo's CI — there is no test suite here.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FGMYobMquMrQE2MB2QEnBW
+---
+ SETUP.md                   |  17 +++++--
+ scripts/run-job-scan.js    |  17 ++++---
+ src/components/JobCard.jsx |  14 ++---
+ src/lib/dismiss.js         |  67 ++++++++++--------------
+ supabase/schema.sql        | 102 +++++++++++++++++++++++++++----------
+ 5 files changed, 133 insertions(+), 84 deletions(-)
+
+diff --git a/SETUP.md b/SETUP.md
+index f69e08c..4c3df91 100644
+--- a/SETUP.md
++++ b/SETUP.md
+@@ -456,9 +456,20 @@ you find out:
+ - **No longer available** — you opened it and the posting is gone.
+ - **Not interested** — it's still up, you just don't want it.
+ 
+-Either one **deletes the posting outright**. It disappears from Matches and
+-from Pipeline, and the match write-up, keyword analysis and any generated
+-documents go with it (they cascade off the posting row).
++Either one **suppresses the role**. It disappears from Matches and from
++Pipeline immediately, and the scan will not re-import it however many times the
++feeds carry it again.
++
++Nothing is deleted. The posting row stays in `job_postings`, inert — filtered
++out of every list and never re-scored — and the match write-up and any
++generated documents stay with it. Dismissing used to delete the posting, which
++also destroyed those, because `job_matches` and `job_applications` cascade off
++the posting row: dismiss a role you had already applied to and your own pipeline
++entry went with it. On a Supabase project shared with other apps it was worse,
++since one person dismissing a role destroyed everyone's verdicts and
++applications for it.
++
++Un-dismissing is a `delete from job_dismissed` — see below.
+ 
+ **Company-name variants are collapsed.** The fingerprint hashes the company
+ with legal-entity suffixes stripped from the end (`Inc`, `Ltd`, `LLC`, `Corp`,
+diff --git a/scripts/run-job-scan.js b/scripts/run-job-scan.js
+index 8995cae..bd4f802 100644
+--- a/scripts/run-job-scan.js
++++ b/scripts/run-job-scan.js
+@@ -695,14 +695,15 @@ async function main() {
+       if (before !== unique.length) {
+         console.log(`Suppressed: ${before - unique.length} re-imported roles you had thrown away`)
+       }
+-      // Sweep up drift: a posting whose delete failed after its suppression
+-      // row was written (see lib/dismiss.js — the order there means this is
+-      // the recoverable half), or one dismissed while a scan was mid-flight.
+-      const { error: sweepErr } = await db
+-        .from('job_postings')
+-        .delete()
+-        .in('fingerprint', [...dismissed])
+-      if (sweepErr) console.warn(`Could not sweep dismissed postings: ${sweepErr.message}`)
++      // Dismissed postings are deliberately left in job_postings. The filter
++      // above already keeps them from being re-imported or re-scored, and the
++      // app filters them out of every list, so the row is inert.
++      //
++      // Deleting it would not be tidying up: job_matches and job_applications
++      // both cascade from job_postings, so sweeping a dismissed posting throws
++      // away its match write-up, its application status and any generated
++      // cover letter — for every user of this project, not just whoever
++      // dismissed it. See lib/dismiss.js.
+     }
+ 
+     // ---- persist postings ----
+diff --git a/src/components/JobCard.jsx b/src/components/JobCard.jsx
+index fc645fd..cc9e8a5 100644
+--- a/src/components/JobCard.jsx
++++ b/src/components/JobCard.jsx
+@@ -389,12 +389,14 @@ export default function JobCard({ job, onChanged }) {
+ 
+           {/* The two ways a role stops being worth looking at, one click each
+               and sitting right under the link — because that is where you
+-              find out. These DELETE the posting rather than filing it under a
++              find out. These suppress the role rather than filing it under a
+               status: a status still has to be shown somewhere, and the point
+-              is that it stops existing. Said plainly above the buttons, since
+-              there is no undo in the app. */}
++              is that it stops appearing. Nothing is deleted — the posting and
++              its write-up stay put, filtered out of every list — but there is
++              no undo in the app, so it is still said plainly above the
++              buttons. */}
+           <div className="job-dismiss">
+-            <span className="muted sm">Delete this role for good:</span>
++            <span className="muted sm">Hide this role for good:</span>
+             <span className="row">
+               {Object.entries(DISMISS_REASONS).map(([reason, label]) => (
+                 <button
+@@ -402,9 +404,9 @@ export default function JobCard({ job, onChanged }) {
+                   className="btn ghost sm"
+                   disabled={busy || Boolean(dismissing)}
+                   onClick={() => dismiss(reason)}
+-                  title="Deletes the posting and stops future scans re-importing it. Permanent."
++                  title="Hides the role and stops future scans re-importing it. No undo in the app."
+                 >
+-                  {dismissing === reason ? 'Deleting…' : label}
++                  {dismissing === reason ? 'Hiding…' : label}
+                 </button>
+               ))}
+             </span>
+diff --git a/src/lib/dismiss.js b/src/lib/dismiss.js
+index 10061e6..f76ab5f 100644
+--- a/src/lib/dismiss.js
++++ b/src/lib/dismiss.js
+@@ -3,57 +3,42 @@ import { supabase } from './supabase'
+ /**
+  * Throw a role away for good.
+  *
+- * Two steps, and the ORDER IS LOAD-BEARING. Deleting the posting on its own
+- * does not make a role go away: the feeds still carry it, so the next scan
+- * re-imports it, spends an LLM call re-scoring it, and puts it back in the
+- * list. The suppression row is what makes the deletion stick, so it is written
+- * first and the delete only happens once it succeeded.
++ * One step: write the suppression row. Nothing is deleted.
+  *
+- * Both failure modes therefore land somewhere safe:
+- *   - suppression fails  → nothing is deleted, the card stays, you see an error
+- *   - delete fails       → the row is already suppressed, and the next scan
+- *                          removes it (see the drift sweep in run-job-scan.js)
++ * The suppression row is what actually makes a role go away, and it always
++ * was — it does the whole job on both paths that matter. The list filters
++ * against it the moment it is written (Jobs.jsx, Applications.jsx), so the card
++ * disappears immediately; and the scan filters re-imported feed results against
++ * it before persisting, so the role never comes back. Neither of those ever
++ * consulted job_postings.
+  *
+- * The reverse order would give the one genuinely bad outcome: the match
+- * write-up thrown away and the posting back again a week later.
++ * This used to also delete the posting row, which looked like tidying up and
++ * was not. job_matches and job_applications both declare
++ *
++ *   references job_postings(id) on delete cascade
++ *
++ * so deleting a posting silently destroyed its match write-up, its application
++ * status, and any generated cover letter. Dismiss a role you had already
++ * applied to and your own pipeline entry went with it. On a Supabase project
++ * shared by several people it was worse: one person dismissing a role destroyed
++ * everybody else's verdicts and applications for it, because the posting is a
++ * single shared row.
++ *
++ * What is lost by not deleting: dismissed postings stay in job_postings. They
++ * are filtered out of every list and never re-scored, so this costs some rows
++ * and nothing else — a fair price for not cascading through other people's
++ * data.
+  */
+ export async function dismissPosting(job, reason) {
+   if (!job?.fingerprint) {
+     // Only possible if job_ranked predates the column, i.e. the schema wasn't
+-    // re-run. Say so plainly rather than silently deleting nothing.
++    // re-run. Say so plainly rather than silently suppressing nothing.
+     throw new Error('This posting has no fingerprint — re-run supabase/schema.sql, then try again.')
+   }
+ 
+-  const { error: markErr } = await supabase.from('job_dismissed').upsert(
++  const { error } = await supabase.from('job_dismissed').upsert(
+     { fingerprint: job.fingerprint, title: job.title, company: job.company, reason },
+     { onConflict: 'fingerprint' }
+   )
+-  if (markErr) throw new Error(`Could not record the dismissal: ${markErr.message}`)
+-
+-  const { error: delErr } = await supabase.from('job_postings').delete().eq('id', job.id)
+-  if (delErr) throw new Error(`Recorded, but could not delete it yet: ${delErr.message}`)
+-
+-  // A DELETE that row-level security refuses is NOT an error: PostgREST
+-  // answers 204 No Content having removed nothing, and supabase-js reports
+-  // error: null. So a blocked delete is indistinguishable from a real one
+-  // unless you go and look — which is why the button once said "Deleting…",
+-  // reported no failure, and left the posting sitting there.
+-  //
+-  // The check reads back through job_ranked rather than asking DELETE for a
+-  // RETURNING clause. Postgres applies SELECT policies to RETURNING, and this
+-  // install has none on job_postings — reads go through the view, which runs
+-  // with its owner's rights. Verifying via the same path the app already
+-  // reads by is the one that cannot fail for a reason unrelated to the delete.
+-  const { count, error: checkErr } = await supabase
+-    .from('job_ranked')
+-    .select('id', { count: 'exact', head: true })
+-    .eq('id', job.id)
+-  if (checkErr) return // can't verify; the scan's sweep is the backstop
+-  if (count) {
+-    throw new Error(
+-      'The database would not delete this posting — the delete was refused and nothing was removed. ' +
+-        'It is recorded as dismissed, so it has gone from your lists and the next scan will clear ' +
+-        'the row, but the delete policy on job_postings needs fixing.'
+-    )
+-  }
++  if (error) throw new Error(`Could not record the dismissal: ${error.message}`)
+ }
+diff --git a/supabase/schema.sql b/supabase/schema.sql
+index 7938858..d2712a2 100644
+--- a/supabase/schema.sql
++++ b/supabase/schema.sql
+@@ -302,50 +302,99 @@ alter table job_matches enable row level security;
+ alter table job_applications enable row level security;
+ alter table job_runs enable row level security;
+ 
++-- `to authenticated using (true)` is NOT a restriction on this install. The
++-- Supabase project is shared with five other apps, and Supabase Auth is
++-- per-project: an account created for any of them can sign in here. "Any
++-- authenticated user" therefore means anyone with an account on any of those
++-- apps, not the owner of this one.
++--
++-- Access is granted per app instead, in the project's app_access table, and
++-- checked by has_app_access(). See the Supabase-platform- repo.
++
++do $$ begin
++  if to_regprocedure('public.has_app_access(text)') is null then
++    raise exception
++      'has_app_access(text) is missing. Run app_access_pattern.sql from the '
++      'Supabase-platform- repo against this project first, or these policies '
++      'would reference a function that does not exist and lock everyone out.';
++  end if;
++end $$;
++
+ drop policy if exists "job_profile_auth" on job_profile;
+-create policy "job_profile_auth" on job_profile
+-  for all to authenticated using (true) with check (true);
++drop policy if exists "job_profile all (job)" on job_profile;
++create policy "job_profile all (job)" on job_profile
++  for all to authenticated
++  using (public.has_app_access('job')) with check (public.has_app_access('job'));
+ 
+ drop policy if exists "job_sources_auth" on job_sources;
+-create policy "job_sources_auth" on job_sources
+-  for all to authenticated using (true) with check (true);
++drop policy if exists "job_sources all (job)" on job_sources;
++create policy "job_sources all (job)" on job_sources
++  for all to authenticated
++  using (public.has_app_access('job')) with check (public.has_app_access('job'));
+ 
+ drop policy if exists "job_applications_auth" on job_applications;
+-create policy "job_applications_auth" on job_applications
+-  for all to authenticated using (true) with check (true);
++drop policy if exists "job_applications all (job)" on job_applications;
++create policy "job_applications all (job)" on job_applications
++  for all to authenticated
++  using (public.has_app_access('job')) with check (public.has_app_access('job'));
+ 
+ drop policy if exists "job_dismissed_auth" on job_dismissed;
+-create policy "job_dismissed_auth" on job_dismissed
+-  for all to authenticated using (true) with check (true);
++drop policy if exists "job_dismissed all (job)" on job_dismissed;
++create policy "job_dismissed all (job)" on job_dismissed
++  for all to authenticated
++  using (public.has_app_access('job')) with check (public.has_app_access('job'));
+ 
+--- Postings, matches and runs are written only by the scan job (service
+--- role). The app reads them.
++-- Postings, matches and runs are written only by the scan job, which uses the
++-- service role and bypasses RLS entirely. The app only reads them.
+ drop policy if exists "job_postings_read" on job_postings;
+-create policy "job_postings_read" on job_postings
+-  for select to authenticated using (true);
++drop policy if exists "job_postings select (job)" on job_postings;
++create policy "job_postings select (job)" on job_postings
++  for select to authenticated using (public.has_app_access('job'));
+ 
+--- ...with one exception: throwing a role away deletes the posting outright,
+--- and that happens from the browser. DELETE only — the app still cannot
+--- INSERT or UPDATE a posting, so nothing here lets it edit scan results.
+--- The cascade to job_matches and job_applications is a referential action,
+--- run by the system rather than by this role, so those stay read-only too.
++-- There is deliberately NO delete policy on job_postings.
++--
++-- There used to be one, so the dismiss button could delete the posting. That
++-- was a mistake: job_matches and job_applications both cascade from
++-- job_postings, so dismissing a role destroyed its match write-up, its
++-- application status and any generated cover letter — and on a shared project,
++-- everyone else's too, since the posting is one shared row.
++--
++-- Dismissing now writes only the suppression row in job_dismissed, which is
++-- what made a role disappear all along: the app filters against it and the scan
++-- refuses to re-import anything in it. Nothing in the browser deletes a posting
++-- any more, and with no policy here nothing can.
+ drop policy if exists "job_postings_dismiss" on job_postings;
+-create policy "job_postings_dismiss" on job_postings
+-  for delete to authenticated using (true);
++drop policy if exists "job_postings delete (job)" on job_postings;
+ 
+ drop policy if exists "job_matches_read" on job_matches;
+-create policy "job_matches_read" on job_matches
+-  for select to authenticated using (true);
++drop policy if exists "job_matches select (job)" on job_matches;
++create policy "job_matches select (job)" on job_matches
++  for select to authenticated using (public.has_app_access('job'));
+ 
+ drop policy if exists "job_runs_read" on job_runs;
+-create policy "job_runs_read" on job_runs
+-  for select to authenticated using (true);
++drop policy if exists "job_runs select (job)" on job_runs;
++create policy "job_runs select (job)" on job_runs
++  for select to authenticated using (public.has_app_access('job'));
+ 
+ -- ---------------------------------------------------------------------
+ -- Convenience view: ranked jobs with their match verdict and pipeline
+ -- status in one shot, so the dashboard is a single query.
+ -- ---------------------------------------------------------------------
+-create or replace view job_ranked as
++-- security_invoker is load-bearing, not a detail.
++--
++-- Without it a view runs with its OWNER's rights, so the policies on the tables
++-- underneath are evaluated as the owner and effectively skipped. This view was
++-- created that way and granted to authenticated, which meant every job_* table
++-- was correctly gated and all 1,337 postings, match write-ups and application
++-- statuses were readable straight through the view by accounts with no grant
++-- for this app. Policies protect tables; they do not protect a definer view
++-- sitting on top of them.
++--
++-- With it, the view defers to whoever is querying, and the has_app_access
++-- policies above apply. That is why job_postings needs the SELECT policy above:
++-- the app reaches postings only through this view, so before, no policy was
++-- needed and none existed.
++create or replace view job_ranked with (security_invoker = true) as
+ select
+   p.id,
+   p.title,
+@@ -415,8 +464,9 @@ from job_postings p
+ left join job_matches m on m.posting_id = p.id
+ left join job_applications a on a.posting_id = p.id;
+ 
+--- Views run with the definer's rights; the underlying tables are still
+--- RLS-protected, and anon has no grant here.
++-- Both halves matter. The grant keeps anon out; security_invoker above is what
++-- makes the grant to authenticated mean "and then the table policies apply"
++-- rather than "and then read everything as the owner".
+ revoke all on job_ranked from anon;
+ grant select on job_ranked to authenticated;
+ 
+-- 
+2.43.0
+

@@ -107,14 +107,29 @@ access.
 <a name="open"></a>
 
 **Per-user rows for `job`.** It is gated but not row-scoped — correct while it has one
-user, wrong the moment it has two. `job_profile`, `job_applications`, `job_dismissed` and
-`job_matches` need a `user_id` column and a backfill of the existing 1,346 rows;
-`job_postings`, `job_sources` and `job_runs` stay shared.
+user, wrong the moment it has two.
 
-Blocked on one thing: something generates `job_matches` on a schedule. If that writer
-does not set `user_id`, every new match arrives owned by nobody, the personal policy
-hides it from everyone, and the app looks like it stopped finding jobs. The writer has to
-change alongside the schema, not after it.
+This is a project, not a migration, and the recommendation is to leave it until a second
+job-seeker actually needs it:
+
+- `job_matches` is keyed one row per posting, so two users' verdicts **collide** on the
+  primary key — per-user matches are impossible, not merely unattributed
+- `job_profile` declares `check (id = 1)`; a second profile is physically forbidden
+- the scan runs under the service role with no auth context and loads `job_profile`
+  where `id = 1`. It has no concept of users — no loop, no parameter, no column
+- the edge function authenticates the caller and then discards the identity, reading
+  profile `id = 1` regardless
+- `alreadyScored`, the LLM budget cap, `scoreById`, deadline expiry and query building
+  all assume a single profile
+- and the repo has **no test suite** — the only verification is running a real scan
+  against the real database
+
+Fixed and landed in the meantime: dismissing a role used to delete the shared
+`job_postings` row, and `job_matches` and `job_applications` cascade off it — so a
+dismissal destroyed the match write-up, application status and any generated cover
+letter, for everyone. Dismissal now writes only the suppression row, and the DELETE
+policy on `job_postings` is gone, so the app cannot delete a posting even if the code
+tries again.
 
 ## A caveat worth keeping honest
 

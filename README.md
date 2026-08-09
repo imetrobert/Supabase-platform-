@@ -109,6 +109,11 @@ access.
 **Per-user rows for `job`.** It is gated but not row-scoped — correct while it has one
 user, wrong the moment it has two.
 
+**Planned, not scheduled — see [`plans/job-per-user-access.md`](plans/job-per-user-access.md).**
+That document is the design: the four decisions to make before writing any code, the work
+in order, and how to verify it in a repo with no test suite. Do not start from this
+summary.
+
 This is a project, not a migration, and the recommendation is to leave it until a second
 job-seeker actually needs it:
 

@@ -182,6 +182,7 @@ const RULES = [
 
 const $ = (id) => document.getElementById(id);
 let accessToken = null;
+let userId = null;
 
 /* ── Supabase REST ───────────────────────────────────────────────────── */
 
@@ -245,6 +246,7 @@ async function redeemLink() {
   history.replaceState(null, '', location.pathname);
 
   const user = await call(`${SUPABASE_URL}/auth/v1/user`, { headers: authed() });
+  userId = user.id;
   $('for-whom').textContent = `Invitation for ${user.email}`;
   $('whoami').textContent = user.email;
   show('form');
@@ -325,11 +327,18 @@ async function showAccess() {
   const box = $('access');
   box.innerHTML = '';
 
-  // Their own rows, and only their own — the app_access read policy is what
-  // makes that true, not this query.
+  // Their own rows, and only their own. Scoped here as well as by policy,
+  // because the policy is not the guarantee it looks like: `app_access read
+  // own` widens to every row in the table for a platform admin, so an
+  // unfiltered select would show whoever opened this page the entire
+  // project's grants as though they were their own. An invitation can never
+  // produce an admin — invite_app_user refuses `platform` — but this page is
+  // one redirect setting away from being where a recovery link lands, and
+  // that is not a footgun to leave lying about for the sake of one parameter.
   let granted = [];
   try {
-    granted = await call(`${SUPABASE_URL}/rest/v1/app_access?select=app,role&order=app`,
+    granted = await call(
+      `${SUPABASE_URL}/rest/v1/app_access?select=app,role&user_id=eq.${userId}&order=app`,
       { headers: authed() });
   } catch {
     // Not worth an error state. The password is set, which is what they came

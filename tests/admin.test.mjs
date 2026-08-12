@@ -310,8 +310,10 @@ async function newInvitePage({ granted = [], updateFails = null } = {}) {
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u-new', email: 'new@example.com' }) });
   });
 
-  await page.route('**/rest/v1/app_access**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(granted) }));
+  await page.route('**/rest/v1/app_access**', (route) => {
+    calls.push({ method: 'GRANTS', url: route.request().url() });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(granted) });
+  });
 
   return { page, calls };
 }
@@ -383,6 +385,17 @@ const STRONG = 'Correct-Horse-42';
   if (!(await etf.count())) problems.push('an app with no address on file vanished from the list');
   if (await etf.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
   if (!shown.includes('administrator')) problems.push('the admin role was not shown');
+
+  // Only what they were given. The read policy widens to the whole table for a
+  // platform admin, so leaving this to RLS would show an admin who landed here
+  // every grant on the project as though it were theirs.
+  const fetched = calls.find((c) => c.method === 'GRANTS');
+  if (!fetched?.url.includes('user_id=eq.u-new')) {
+    problems.push(`the granted apps were read unscoped: ${fetched?.url}`);
+  }
+  if (await page.locator('#access li').count() !== 2) {
+    problems.push('the list showed something other than the two apps they were granted');
+  }
   const stored = await page.evaluate(() => Object.keys(localStorage).length);
   if (stored) problems.push('the invitation session was left in localStorage on a possibly shared device');
   console.log('  ✓ the password is set on the invitation session, and nothing is left behind');

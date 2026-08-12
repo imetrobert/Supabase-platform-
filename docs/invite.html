@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Set your password</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #16181d;
+    --muted: #6b7280;
+    --line: #e3e6ea;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --warn: #b45309;
+    --warn-bg: #fef3c7;
+    --danger: #b91c1c;
+    --ok: #047857;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #171a20;
+      --ink: #e8eaed;
+      --muted: #9aa1ab;
+      --line: #2a2f38;
+      --accent: #3b82f6;
+      --accent-ink: #0f1115;
+      --warn: #fbbf24;
+      --warn-bg: #3a2f10;
+      --danger: #f87171;
+      --ok: #34d399;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 460px; margin: 0 auto; padding: 24px 14px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; margin-top: 14px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  input[type=password], input[type=text] {
+    width: 100%; padding: 11px 12px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: var(--bg); color: var(--ink);
+  }
+  button {
+    font: inherit; cursor: pointer; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    padding: 10px 14px;
+  }
+  button.primary {
+    background: var(--accent); color: var(--accent-ink);
+    border-color: transparent; font-weight: 600; width: 100%; margin-top: 16px;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+
+  .rules { list-style: none; margin: 12px 0 0; padding: 0; }
+  .rules li {
+    font-size: 13px; color: var(--muted);
+    padding-left: 22px; position: relative; line-height: 1.9;
+  }
+  .rules li::before {
+    content: "○"; position: absolute; left: 4px; color: var(--line);
+  }
+  /* Met rules go quiet rather than loud. What is left to do should be the
+     thing that stands out, not the pile of things already done. */
+  .rules li.met { color: var(--ok); }
+  .rules li.met::before { content: "✓"; color: var(--ok); }
+
+  .show { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .show input { width: auto; }
+
+  .note { font-size: 13px; padding: 10px 12px; border-radius: 9px; margin-top: 14px; }
+  .note.err { background: var(--warn-bg); color: var(--danger); }
+  .note.ok { color: var(--ok); }
+  .apps { margin: 12px 0 0; padding: 0; list-style: none; }
+  .apps li { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .apps li:first-child { border-top: none; }
+  .apps small { color: var(--muted); }
+  .hidden { display: none !important; }
+  footer { margin-top: 20px; font-size: 12.5px; color: var(--muted); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Set your password</h1>
+  <p class="muted" id="subtitle">One password for every app you have been given.</p>
+
+  <!-- Choose a password -->
+  <section id="form-view" class="card hidden">
+    <div class="muted" id="for-whom"></div>
+    <form id="password-form">
+      <label for="password">New password</label>
+      <input id="password" type="password" autocomplete="new-password" required>
+      <ul class="rules" id="rules"></ul>
+      <label for="confirm">Type it again</label>
+      <input id="confirm" type="password" autocomplete="new-password" required>
+      <label class="show"><input id="show" type="checkbox"> Show what I am typing</label>
+      <button class="primary" id="save" type="submit" disabled>Set password</button>
+    </form>
+    <div id="form-error" class="note err hidden"></div>
+  </section>
+
+  <!-- Done -->
+  <section id="done-view" class="card hidden">
+    <div class="note ok" style="margin-top:0">Your password is set. You are signed in.</div>
+    <div id="access"></div>
+  </section>
+
+  <!-- Bad or expired link -->
+  <section id="bad-view" class="card hidden">
+    <div class="note err" id="bad-message" style="margin-top:0"></div>
+    <p class="muted">Invitation links can only be used once, and they expire. Ask
+       whoever invited you to send another.</p>
+  </section>
+
+  <div id="boot" class="muted">Checking your invitation…</div>
+
+  <footer id="footer" class="hidden">
+    Signed in as <span id="whoami"></span>. Keep this password in a password
+    manager — there is no separate password per app.
+  </footer>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+ * Set your password — where an invitation email lands.
+ *
+ * The link carries a one-use token. Exchanging it gives a real session, and
+ * this page uses that session for exactly two things: setting the password,
+ * and reading back which apps the person now has. Nothing is written to
+ * localStorage — an invitation is often opened on a shared or borrowed
+ * device, and a session left behind there is a way in for whoever uses it
+ * next. Closing the tab ends it.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+const SUPABASE_URL = 'https://ipnajvgwtjrlecbqfwrh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go';
+
+/* Display names only. An app missing here shows its raw id rather than
+ * vanishing — being told you have access to `cartmatch` is ugly, being told
+ * you have access to nothing when you do is worse. */
+const APPS = {
+  'claims-tracker': { name: 'Claims Tracker',  url: 'https://tax.imetrobert.com' },
+  'invoicing':      { name: 'Invoicing' },
+  'etf':            { name: 'ETF Tracker' },
+  'job':            { name: 'Job Search',      url: 'https://jobs.imetrobert.com' },
+  'cartmatch':      { name: 'Price Checker' },
+  'fb-marketplace': { name: 'Marketplace Ads', url: 'https://fbmarket.imetrobert.com' },
+  'platform':       { name: 'Access Rights',   url: 'https://access.imetrobert.com' },
+};
+
+/* Mirrored from the project's own password settings, so a rule can be seen
+ * before it is broken. The server is what enforces them — including the check
+ * against known-breached passwords, which cannot be done here and is the one
+ * rule this list does not show. */
+const RULES = [
+  ['At least 12 characters',      (v) => v.length >= 12],
+  ['A lowercase letter',          (v) => /[a-z]/.test(v)],
+  ['An uppercase letter',         (v) => /[A-Z]/.test(v)],
+  ['A number',                    (v) => /[0-9]/.test(v)],
+  ['A symbol, like ! ? # or -',   (v) => /[^A-Za-z0-9]/.test(v)],
+];
+
+const $ = (id) => document.getElementById(id);
+let accessToken = null;
+
+/* ── Supabase REST ───────────────────────────────────────────────────── */
+
+async function call(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(body?.message || body?.msg || body?.error_description || `Request failed (${response.status})`);
+  }
+  return body;
+}
+
+const authed = () => ({
+  'Content-Type': 'application/json',
+  apikey: SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${accessToken}`,
+});
+
+/* ── The link ────────────────────────────────────────────────────────── */
+
+function show(view) {
+  $('boot').classList.add('hidden');
+  for (const name of ['form', 'done', 'bad']) {
+    $(`${name}-view`).classList.toggle('hidden', name !== view);
+  }
+}
+
+function refuse(message) {
+  $('bad-message').textContent = message;
+  show('bad');
+}
+
+/* Supabase sends one of two shapes depending on how the project is
+ * configured, and an expired link sends a third. All three arrive here. */
+async function redeemLink() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(location.search);
+  const param = (key) => hash.get(key) ?? query.get(key);
+
+  const failure = param('error_description') || param('error');
+  if (failure) return refuse(decodeURIComponent(failure.replace(/\+/g, ' ')));
+
+  if (param('access_token')) {
+    accessToken = param('access_token');
+  } else if (param('token_hash')) {
+    const data = await call(`${SUPABASE_URL}/auth/v1/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ type: param('type') || 'invite', token_hash: param('token_hash') }),
+    });
+    accessToken = data.access_token;
+  } else {
+    return refuse('This link is missing its invitation token. Open the link from '
+      + 'the email directly rather than copying part of it.');
+  }
+
+  // The address bar is the one place a live token is casually copied out of —
+  // into a chat, a bug report, a screenshot. It has been spent on a session
+  // now, so there is no reason to leave it on screen.
+  history.replaceState(null, '', location.pathname);
+
+  const user = await call(`${SUPABASE_URL}/auth/v1/user`, { headers: authed() });
+  $('for-whom').textContent = `Invitation for ${user.email}`;
+  $('whoami').textContent = user.email;
+  show('form');
+}
+
+/* ── The form ────────────────────────────────────────────────────────── */
+
+function renderRules(value) {
+  const list = $('rules');
+  list.innerHTML = '';
+  let allMet = true;
+  for (const [label, test] of RULES) {
+    const met = test(value);
+    allMet = allMet && met;
+    const item = document.createElement('li');
+    item.textContent = label;
+    if (met) item.classList.add('met');
+    list.appendChild(item);
+  }
+  return allMet;
+}
+
+function validate() {
+  const value = $('password').value;
+  const strong = renderRules(value);
+  const matches = value.length > 0 && value === $('confirm').value;
+  $('save').disabled = !(strong && matches);
+  return { strong, matches };
+}
+
+$('password').addEventListener('input', validate);
+$('confirm').addEventListener('input', validate);
+
+$('show').addEventListener('change', (event) => {
+  const type = event.target.checked ? 'text' : 'password';
+  $('password').type = type;
+  $('confirm').type = type;
+});
+
+$('password-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const error = $('form-error');
+  error.classList.add('hidden');
+
+  const { strong, matches } = validate();
+  if (!strong) return;
+  if (!matches) {
+    error.textContent = 'The two passwords are not the same.';
+    return error.classList.remove('hidden');
+  }
+
+  $('save').disabled = true;
+  $('save').textContent = 'Setting…';
+  try {
+    await call(`${SUPABASE_URL}/auth/v1/user`, {
+      method: 'PUT',
+      headers: authed(),
+      body: JSON.stringify({ password: $('password').value }),
+    });
+    await showAccess();
+  } catch (e) {
+    // The server rejects breached passwords with its own wording, and that
+    // message is the only place the rule is explained. Show it as it came.
+    error.textContent = e.message;
+    error.classList.remove('hidden');
+    $('save').disabled = false;
+    $('save').textContent = 'Set password';
+  }
+});
+
+/* ── What they can now reach ─────────────────────────────────────────── */
+
+async function showAccess() {
+  show('done');
+  $('footer').classList.remove('hidden');
+  $('subtitle').textContent = 'You are all set.';
+
+  const box = $('access');
+  box.innerHTML = '';
+
+  // Their own rows, and only their own — the app_access read policy is what
+  // makes that true, not this query.
+  let granted = [];
+  try {
+    granted = await call(`${SUPABASE_URL}/rest/v1/app_access?select=app,role&order=app`,
+      { headers: authed() });
+  } catch {
+    // Not worth an error state. The password is set, which is what they came
+    // for; whoever invited them can tell them where to go.
+    return;
+  }
+
+  const heading = document.createElement('p');
+  heading.className = 'muted';
+  heading.style.margin = '14px 0 0';
+  heading.textContent = granted.length
+    ? 'You now have access to:'
+    : 'You do not have access to any app yet. Whoever invited you can grant it, '
+      + 'and it will work the next time you sign in — no new password needed.';
+  box.appendChild(heading);
+
+  if (!granted.length) return;
+
+  const list = document.createElement('ul');
+  list.className = 'apps';
+  for (const row of granted) {
+    const app = APPS[row.app] || { name: row.app };
+    const item = document.createElement('li');
+    const label = app.url ? document.createElement('a') : document.createElement('span');
+    if (app.url) label.href = app.url;
+    label.textContent = app.name;
+    item.appendChild(label);
+    if (row.role === 'app_admin') {
+      const role = document.createElement('small');
+      role.textContent = ' — administrator';
+      item.appendChild(role);
+    }
+    list.appendChild(item);
+  }
+  box.appendChild(list);
+}
+
+/* ── Boot ────────────────────────────────────────────────────────────── */
+
+(async function boot() {
+  renderRules('');
+  try {
+    await redeemLink();
+  } catch (e) {
+    refuse(e.message);
+  }
+})();
+</script>
+</body>
+</html>

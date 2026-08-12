@@ -81,7 +81,53 @@ where n.nspname = 'public'
 order by 1;
 
 
--- 5. The checks above are static analysis. The real question is what a caller
+-- 5. SECURITY DEFINER functions that are reachable and not pinned down.
+--
+--    These run as their owner, so they see past every policy on this project.
+--    That is what makes has_app_access() and list_app_users() work at all, and
+--    it is also why a careless one is worse than any open policy: checks 1-4
+--    inspect tables and views, and cannot see a function that hands out their
+--    contents.
+--
+--    Two ways one goes wrong, and this returns only those — a check that fires
+--    on the healthy case teaches you to skim past it:
+--
+--      no pinned search_path — an unqualified name inside the body resolves
+--      through the CALLER's search path, so the caller chooses which table the
+--      function reads while running as the owner
+--
+--      executable by anon — the publishable key ships in public HTML, so this
+--      is the internet holding the owner's rights
+--
+--    MUST RETURN NO ROWS.
+
+select p.proname as definer_function,
+       pg_get_function_identity_arguments(p.oid) as args,
+       case when has_function_privilege('anon', p.oid, 'EXECUTE')
+            then 'callable by anon' else 'search_path not pinned' end as why
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prosecdef
+  and (has_function_privilege('anon', p.oid, 'EXECUTE')
+       or not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c
+                      where c like 'search\_path=%'))
+order by 1;
+
+--    The companion to that check is reading the list itself, which no query can
+--    do for you. There should be five, they should all be recognisable, and
+--    invite_app_user is the one to look at hardest — it holds the secret key
+--    and can create accounts:
+--
+--      select p.proname, pg_get_function_identity_arguments(p.oid) as args,
+--             array_to_string(p.proconfig, ', ') as config
+--      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--      where n.nspname = 'public' and p.prosecdef order by 1;
+--
+--    Expected: app_role, has_app_access, invite_app_user, is_platform_admin,
+--    list_app_users. Anything else on that list is either new and deliberate,
+--    or the most urgent thing on this project.
+
+
+-- 6. The checks above are static analysis. The real question is what a caller
 --    actually gets, and only the database can answer that. Impersonate and
 --    count — see verify_access.sql for the full pattern:
 --

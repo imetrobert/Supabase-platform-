@@ -56,6 +56,11 @@ password at **https://access.imetrobert.com/invite.html**, and from then on they
 in to exactly those apps and nothing else — which is not something the invitation
 arranges, but simply what `app_access` already means.
 
+They are told where those apps are, twice: the invitation email lists each one with its
+address, and so does the screen where they set their password. Both come from the same
+grant, so neither can advertise something they cannot open. An app with no address on
+file is still named — knowing you have it and not where it is beats not knowing.
+
 Creating an account needs the secret key, so it cannot happen in a browser. It happens in
 `public.invite_app_user()` instead, which holds the key in the vault, refuses anyone who
 is not a platform admin, and is the most dangerous function on the project — read the
@@ -81,6 +86,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 |---|---|
 | `docs/index.html` | the Access Rights page, served by GitHub Pages |
 | `docs/invite.html` | where an invitation email lands — sets the password, shows what they can now reach |
+| `email/invite.html` | the invitation email, which lives in the dashboard at runtime; this is the reviewable copy |
 | `tests/admin.test.mjs` | drives both pages against a stubbed Supabase — `npm test` |
 | `migration/app_access_pattern.sql` | the deployed access model |
 | `migration/invite_user.sql` | creates an account, invites it and grants it, in one call — **needs one-time setup** |

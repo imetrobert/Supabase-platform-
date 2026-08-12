@@ -371,6 +371,18 @@ const STRONG = 'Correct-Horse-42';
   if (!shown.includes('Job Search') || !shown.includes('ETF Tracker')) {
     problems.push(`the apps they were granted were not listed: "${shown}"`);
   }
+  // The address is the point of this screen — a name alone tells someone they
+  // have something without telling them where it is.
+  const link = page.locator('#access a.app-url', { hasText: 'jobs.imetrobert.com' });
+  if (!(await link.count())) problems.push('the granted app was listed without its address');
+  else if (await link.getAttribute('href') !== 'https://jobs.imetrobert.com') {
+    problems.push(`the app link pointed somewhere else: ${await link.getAttribute('href')}`);
+  }
+  // ETF has no address on file. It must still be named, not silently dropped.
+  const etf = page.locator('#access li', { hasText: 'ETF Tracker' });
+  if (!(await etf.count())) problems.push('an app with no address on file vanished from the list');
+  if (await etf.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
+  if (!shown.includes('administrator')) problems.push('the admin role was not shown');
   const stored = await page.evaluate(() => Object.keys(localStorage).length);
   if (stored) problems.push('the invitation session was left in localStorage on a possibly shared device');
   console.log('  ✓ the password is set on the invitation session, and nothing is left behind');

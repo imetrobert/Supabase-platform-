@@ -85,9 +85,14 @@
   .note.err { background: var(--warn-bg); color: var(--danger); }
   .note.ok { color: var(--ok); }
   .apps { margin: 12px 0 0; padding: 0; list-style: none; }
-  .apps li { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .apps li { padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
   .apps li:first-child { border-top: none; }
-  .apps small { color: var(--muted); }
+  .apps small { color: var(--muted); font-weight: 400; }
+  .app-name { font-weight: 600; }
+  /* The address, spelled out rather than hidden behind the name. This is the
+     one screen where someone learns where their apps live, and a link they
+     cannot read is a link they cannot write down. */
+  .app-url { display: inline-block; margin-top: 1px; font-size: 13.5px; word-break: break-all; }
   .hidden { display: none !important; }
   footer { margin-top: 20px; font-size: 12.5px; color: var(--muted); }
   a { color: var(--accent); }
@@ -348,18 +353,35 @@ async function showAccess() {
   for (const row of granted) {
     const app = APPS[row.app] || { name: row.app };
     const item = document.createElement('li');
-    const label = app.url ? document.createElement('a') : document.createElement('span');
-    if (app.url) label.href = app.url;
-    label.textContent = app.name;
-    item.appendChild(label);
+
+    const name = document.createElement('div');
+    name.className = 'app-name';
+    name.textContent = app.name;
     if (row.role === 'app_admin') {
       const role = document.createElement('small');
       role.textContent = ' — administrator';
-      item.appendChild(role);
+      name.appendChild(role);
+    }
+    item.appendChild(name);
+
+    // An app with no address here still appears, by name. Being told you have
+    // something and not where it is beats not being told at all.
+    if (app.url) {
+      const link = document.createElement('a');
+      link.className = 'app-url';
+      link.href = app.url;
+      link.textContent = app.url.replace(/^https?:\/\//, '');
+      item.appendChild(link);
     }
     list.appendChild(item);
   }
   box.appendChild(list);
+
+  const keep = document.createElement('p');
+  keep.className = 'muted';
+  keep.style.margin = '14px 0 0';
+  keep.textContent = 'Your invitation email lists these too, so you can find them again.';
+  box.appendChild(keep);
 }
 
 /* ── Boot ────────────────────────────────────────────────────────────── */

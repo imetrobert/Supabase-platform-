@@ -62,6 +62,14 @@
 -- 5. Email. The built-in sender is rate limited to a handful of messages an
 --    hour, which is survivable when inviting people one at a time and not
 --    otherwise. Set up custom SMTP if this ever becomes routine.
+--
+-- 6. The invitation itself: Authentication → Emails → Invite user, replaced
+--    with email/invite.html. Optional — the stock template still works and
+--    still lets them in. What it adds is the list of apps they have been
+--    given, with a link to each, which this function attaches to the account
+--    as metadata for the template to read. Send yourself one and read it: the
+--    list is the part that fails silently if the template does not support it,
+--    and email/README.md has the version that cannot.
 
 
 create or replace function public.invite_app_user(target_email text, grants jsonb)
@@ -75,7 +83,28 @@ declare
   project_url  constant text := 'https://ipnajvgwtjrlecbqfwrh.supabase.co';
   redirect_url constant text := 'https://access.imetrobert.com/invite.html';
   hourly_cap   constant int  := 10;
+
+  -- Where each app actually lives, so the invitation can say "here is the
+  -- thing you have been given" rather than just naming it. An app missing from
+  -- here still appears in the email, by its raw id and without a link — a
+  -- forgotten entry must not be able to hide access that was granted.
+  --
+  -- This is the third copy of the app list: index.html has one for the grid,
+  -- invite.html one for the confirmation screen. Three is where duplication
+  -- stops being cheaper than a catalog table — when a seventh app arrives,
+  -- make public.app_catalog and have all three read it.
+  catalog constant jsonb := jsonb_build_object(
+    'claims-tracker', jsonb_build_object('name', 'Claims Tracker',  'url', 'https://tax.imetrobert.com'),
+    'invoicing',      jsonb_build_object('name', 'Invoicing'),
+    'etf',            jsonb_build_object('name', 'ETF Tracker'),
+    'job',            jsonb_build_object('name', 'Job Search',      'url', 'https://jobs.imetrobert.com'),
+    'cartmatch',      jsonb_build_object('name', 'Price Checker'),
+    'fb-marketplace', jsonb_build_object('name', 'Marketplace Ads', 'url', 'https://fbmarket.imetrobert.com')
+  );
+
   email_clean  text;
+  app_json     jsonb;
+  app_lines    text;
   secret_key   text;
   response     extensions.http_response;
   entry        jsonb;
@@ -141,6 +170,24 @@ begin
     raise exception 'no vault secret named auth_secret_key — see the setup note in invite_user.sql';
   end if;
 
+  -- Resolve the apps to names and addresses for the email body. Both shapes
+  -- are sent because Supabase's email templates are Go templates and the
+  -- looping form is the part most likely not to render on a given project:
+  -- `apps` is the structured list a {{ range }} walks, `app_list` is the same
+  -- thing already flattened to text for a template that cannot. See
+  -- email/invite.html.
+  select
+    coalesce(jsonb_agg(jsonb_build_object('name', app_name, 'url', app_url, 'role', app_role)
+                       order by app_name), '[]'::jsonb),
+    string_agg(app_name || coalesce(' — ' || app_url, ''), e'\n' order by app_name)
+  into app_json, app_lines
+  from (
+    select coalesce(catalog -> (g->>'app') ->> 'name', g->>'app') as app_name,
+           catalog -> (g->>'app') ->> 'url'                       as app_url,
+           g->>'role'                                             as app_role
+    from jsonb_array_elements(coalesce(grants, '[]'::jsonb)) g
+  ) resolved;
+
   -- Bounded, because an unreachable auth endpoint would otherwise hold a
   -- database connection open for as long as curl is willing to wait.
   perform extensions.http_set_curlopt('CURLOPT_TIMEOUT', '15');
@@ -153,7 +200,21 @@ begin
       extensions.http_header('Authorization', 'Bearer ' || secret_key)
     ],
     'application/json',
-    jsonb_build_object('email', email_clean)::text
+    -- `data` becomes the account's user_metadata, which is where an email
+    -- template can reach it. Note what that means and do not forget it: THE
+    -- USER CAN EDIT THEIR OWN user_metadata. Everything in here is decoration
+    -- for one email. It is not a record of anything, it is not consulted by
+    -- anything, and it must never be read to decide what someone may do —
+    -- app_access is the only answer to that question. It is written once, at
+    -- the moment the list is true, and never looked at again.
+    jsonb_build_object(
+      'email', email_clean,
+      'data', jsonb_build_object(
+        'apps',       app_json,
+        'app_list',   coalesce(app_lines, ''),
+        'invited_by', coalesce((select email from auth.users where id = auth.uid()), '')
+      )
+    )::text
   )::extensions.http_request);
 
   if response.status <> 200 then

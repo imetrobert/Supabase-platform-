@@ -347,7 +347,14 @@ const STRONG = 'Correct-Horse-42';
         not stay in the address bar afterwards. */
 {
   const { page, calls } = await newInvitePage({
-    granted: [{ app: 'job', role: 'member' }, { app: 'etf', role: 'app_admin' }],
+    granted: [
+      { app: 'job', role: 'member' },
+      { app: 'etf', role: 'app_admin' },
+      // Every app this page knows about now has an address, so the only way to
+      // reach the no-address path is an app it does not know — a legacy grant,
+      // or one added to the project before anyone updated this list.
+      { app: 'legacy-thing', role: 'member' },
+    ],
   });
   await page.goto(`http://localhost:${PORT}/invite.html#access_token=tok&type=invite`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#form-view:not(.hidden)', { timeout: 5000 });
@@ -380,10 +387,11 @@ const STRONG = 'Correct-Horse-42';
   else if (await link.getAttribute('href') !== 'https://jobs.imetrobert.com') {
     problems.push(`the app link pointed somewhere else: ${await link.getAttribute('href')}`);
   }
-  // ETF has no address on file. It must still be named, not silently dropped.
-  const etf = page.locator('#access li', { hasText: 'ETF Tracker' });
-  if (!(await etf.count())) problems.push('an app with no address on file vanished from the list');
-  if (await etf.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
+  // An app this page has never heard of must still be named, not silently
+  // dropped — a stale list cannot be allowed to hide access that was granted.
+  const unknown = page.locator('#access li', { hasText: 'legacy-thing' });
+  if (!(await unknown.count())) problems.push('an app with no address on file vanished from the list');
+  if (await unknown.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
   if (!shown.includes('administrator')) problems.push('the admin role was not shown');
 
   // Only what they were given. The read policy widens to the whole table for a
@@ -393,8 +401,8 @@ const STRONG = 'Correct-Horse-42';
   if (!fetched?.url.includes('user_id=eq.u-new')) {
     problems.push(`the granted apps were read unscoped: ${fetched?.url}`);
   }
-  if (await page.locator('#access li').count() !== 2) {
-    problems.push('the list showed something other than the two apps they were granted');
+  if (await page.locator('#access li').count() !== 3) {
+    problems.push('the list showed something other than the apps they were granted');
   }
   const stored = await page.evaluate(() => Object.keys(localStorage).length);
   if (stored) problems.push('the invitation session was left in localStorage on a possibly shared device');

@@ -58,8 +58,10 @@ arranges, but simply what `app_access` already means.
 
 They are told where those apps are, twice: the invitation email lists each one with its
 address, and so does the screen where they set their password. Both come from the same
-grant, so neither can advertise something they cannot open. An app with no address on
-file is still named — knowing you have it and not where it is beats not knowing.
+grant, so neither can advertise something they cannot open. All six apps have an address
+on file; an app that does not — a legacy grant, or one added before anyone updated the
+list — is still named, because a stale list must not be able to hide access that was
+granted.
 
 Creating an account needs the secret key, so it cannot happen in a browser. It happens in
 `public.invite_app_user()` instead, which holds the key in the vault, refuses anyone who

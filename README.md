@@ -67,7 +67,17 @@ Creating an account needs the secret key, so it cannot happen in a browser. It h
 `public.invite_app_user()` instead, which holds the key in the vault, refuses anyone who
 is not a platform admin, and is the most dangerous function on the project — read the
 header of `migration/invite_user.sql` before changing it. **It needs one-time setup**
-(the vault secret, the redirect URL, the password rules); that file lists it.
+(the vault secret, both URL fields, the password rules); that file lists it.
+
+> **Verified end to end on 2026-08-13** — invitation sent from the page, email delivered,
+> link redeemed, password set, and the confirmation screen listing the granted apps read
+> back out of `app_access` rather than out of the request. That last step is the one that
+> matters: it is the only check that proves the grants were written, and an earlier bug
+> passed every other test while failing exactly there.
+>
+> Still on the built-in email sender, which is rate limited to a handful an hour and sends
+> from a Supabase address. Set up custom SMTP before inviting anyone real — not for the
+> limit, which is survivable, but so invitations come from a domain the recipient knows.
 
 An invitation cannot grant `platform` admin — invite them, then promote them from the
 grid, which asks first.

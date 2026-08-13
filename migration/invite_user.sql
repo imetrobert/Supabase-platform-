@@ -89,10 +89,16 @@ declare
   -- here still appears in the email, by its raw id and without a link — a
   -- forgotten entry must not be able to hide access that was granted.
   --
-  -- This is the third copy of the app list: index.html has one for the grid,
-  -- invite.html one for the confirmation screen. Three is where duplication
-  -- stops being cheaper than a catalog table — when a seventh app arrives,
-  -- make public.app_catalog and have all three read it.
+  -- THIS LIST EXISTS THREE TIMES, and all three now hold the same addresses:
+  -- here, in docs/index.html for the grid, and in docs/invite.html for the
+  -- confirmation screen. Moving an app to a new hostname means three edits,
+  -- and the failure when you make two of them is silent and ugly — the page
+  -- links correctly while the invitation email sends people somewhere dead.
+  --
+  -- Three copies of a name was tolerable. Three copies of an address is a
+  -- standing bet that nobody ever renames anything. Whichever comes first — a
+  -- seventh app or the first hostname change — is when this becomes a
+  -- public.app_catalog table that all three read.
   catalog constant jsonb := jsonb_build_object(
     'claims-tracker', jsonb_build_object('name', 'Claims Tracker',  'url', 'https://tax.imetrobert.com'),
     'invoicing',      jsonb_build_object('name', 'Invoicing',       'url', 'https://invoices.imetrobert.com'),

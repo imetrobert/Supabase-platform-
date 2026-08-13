@@ -76,6 +76,13 @@
   .app-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .app-name { font-size: 14px; }
   .app-name small { display: block; color: var(--muted); font-size: 11.5px; }
+  /* Same size and position as the note it replaced, so a row is no taller and
+     the grid stays as scannable as it was. */
+  .app-name .app-url {
+    display: inline-block; font-size: 11.5px; color: var(--accent);
+    text-decoration: none; word-break: break-all;
+  }
+  .app-name .app-url:hover, .app-name .app-url:focus-visible { text-decoration: underline; }
   .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
   .seg button {
     border: none; border-radius: 0; padding: 7px 10px; font-size: 12.5px;
@@ -179,12 +186,12 @@ const SUPABASE_ANON_KEY = 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go';
  * Any app found in the data but missing here is appended automatically, so a
  * forgotten entry can never hide an existing grant. */
 const APPS = [
-  { id: 'claims-tracker',  name: 'Claims Tracker',   note: 'tax.imetrobert.com' },
-  { id: 'invoicing',       name: 'Invoicing',        note: 'invoices + survey capture' },
-  { id: 'etf',             name: 'ETF Tracker',      note: 'holdings, watchlist, signals' },
-  { id: 'job',             name: 'Job Search',       note: 'jobs.imetrobert.com' },
-  { id: 'cartmatch',       name: 'Price Checker',    note: 'cartmatch' },
-  { id: 'fb-marketplace',  name: 'Marketplace Ads',  note: 'fbmarket.imetrobert.com' },
+  { id: 'claims-tracker',  name: 'Claims Tracker',   url: 'https://tax.imetrobert.com' },
+  { id: 'invoicing',       name: 'Invoicing',        url: 'https://invoices.imetrobert.com' },
+  { id: 'etf',             name: 'ETF Tracker',      url: 'https://etf.imetrobert.com' },
+  { id: 'job',             name: 'Job Search',       url: 'https://jobs.imetrobert.com' },
+  { id: 'cartmatch',       name: 'Price Checker',    url: 'https://pricecheck.imetrobert.com' },
+  { id: 'fb-marketplace',  name: 'Marketplace Ads',  url: 'https://fbmarket.imetrobert.com' },
 ];
 
 /* 'platform' is not an app. A row for it with role app_admin is what lets
@@ -348,11 +355,31 @@ function segment(current, choices, onSelect, isPlatform) {
 function appRow(app, current, onSelect) {
   const row = document.createElement('div');
   row.className = 'app-row';
+
   const name = document.createElement('div');
   name.className = 'app-name';
-  name.innerHTML = '<span></span><small></small>';
-  name.querySelector('span').textContent = app.name;
-  name.querySelector('small').textContent = app.note;
+  const label = document.createElement('span');
+  label.textContent = app.name;
+  name.appendChild(label);
+
+  if (app.url) {
+    // New tab, always. Tapping through to an app from here is checking what it
+    // is, not leaving — and losing a half-finished set of grants to a stray tap
+    // is the kind of small betrayal that makes a page feel unsafe to use.
+    const link = document.createElement('a');
+    link.className = 'app-url';
+    link.href = app.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = app.url.replace(/^https?:\/\//, '');
+    name.appendChild(link);
+  } else if (app.note) {
+    // No address: an app known only from a leftover grant. It says so instead.
+    const note = document.createElement('small');
+    note.textContent = app.note;
+    name.appendChild(note);
+  }
+
   row.append(name, segment(current, ROLE_CHOICES, onSelect, false));
   return row;
 }

@@ -19,6 +19,9 @@ await new Promise((r) => server.listen(PORT, r));
 
 const browser = await chromium.launch({ ...(fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {}) });
 
+/* The six apps the page lists, all of which now carry an address. */
+const APPS_WITH_URLS = 6;
+
 const USERS = [
   { id: 'u-robert', email: 'robert@imetrobert.com', created_at: '2026-05-09T00:00:00Z', last_sign_in_at: '2026-08-09T13:35:51Z' },
   { id: 'u-obou',   email: 'oboulian@gmail.com',    created_at: '2026-08-03T00:00:00Z', last_sign_in_at: '2026-08-03T00:00:00Z' },
@@ -117,6 +120,35 @@ const login = async (page, password = 'right') => {
     problems.push('a grant for an app missing from APPS was not shown — it would be invisible and unrevokable');
   }
   console.log('  ✓ a grant for an unlisted app is still shown, so it can be revoked');
+  await page.close();
+}
+
+/* 2b — every app in the grid links to itself, in a new tab. */
+{
+  const { page } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  const card = page.locator('.user').first();
+
+  const job = card.locator('.app-row', { hasText: 'Job Search' }).locator('a.app-url');
+  if (await job.getAttribute('href') !== 'https://jobs.imetrobert.com') {
+    problems.push(`Job Search linked to ${await job.getAttribute('href')}`);
+  }
+  // A stray tap on a link must not take a half-finished set of grants with it.
+  if (await job.getAttribute('target') !== '_blank') problems.push('an app link would navigate away from the page');
+  if (!(await job.getAttribute('rel'))?.includes('noopener')) problems.push('an app link opened a new tab without noopener');
+  if (await card.locator('.apps a.app-url').count() !== APPS_WITH_URLS) {
+    problems.push('not every app in the grid carries its address');
+  }
+
+  // A leftover grant has no address, and must still be legible rather than a
+  // bare id with nothing under it.
+  const legacy = page.locator('.app-row', { hasText: 'legacy-thing' }).first();
+  if (await legacy.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
+  if (!(await legacy.textContent()).includes('not listed in this page')) {
+    problems.push('an unlisted app lost the note explaining why it is there');
+  }
+  console.log('  ✓ every app links to itself in a new tab, and a leftover grant still explains itself');
   await page.close();
 }
 

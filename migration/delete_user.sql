@@ -124,6 +124,7 @@ declare
   secret_key   text;
   response     extensions.http_response;
   target_email text;
+  err_msg      text := '';
 begin
   -- The guard. First, and raising, for the same reason as in invite_app_user:
   -- a filter on a function with side effects does nothing while reporting
@@ -217,8 +218,26 @@ begin
   -- 200 is the success here; 404 means it was already gone, which is not worth
   -- raising over — the caller wanted it absent and it is absent.
   if response.status not in (200, 404) then
-    raise exception 'delete refused by auth (%): %',
-      response.status, left(coalesce(response.content, ''), 200);
+    begin
+      err_msg := coalesce(response.content::jsonb->>'msg',
+                          response.content::jsonb->>'message', '');
+    exception when others then
+      err_msg := '';
+    end;
+
+    raise exception '%', case
+      when response.status = 401 then
+        'Supabase would not accept the secret key. Whatever is in the vault is wrong, expired '
+        || 'or revoked — see the setup note at the top of invite_user.sql. Nothing was deleted.'
+      when response.status = 409 or response.status = 500 then
+        target_email || ' could not be deleted, usually because something else on the project '
+        || 'still refers to this account. Nothing was deleted — the query at the top of '
+        || 'delete_user.sql lists what points at auth.users and what each one does.'
+      else
+        'Deleting ' || target_email || ' was refused (' || response.status || ')'
+        || case when err_msg <> '' then ': ' || err_msg else '.' end
+        || ' Nothing was deleted.'
+    end;
   end if;
 
   -- Nothing to clean up afterwards: app_access cascades off auth.users, so the

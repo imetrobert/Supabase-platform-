@@ -326,6 +326,25 @@ const login = async (page, password = 'right') => {
   await page.close();
 }
 
+/* 11a — a missing migration says what to do, not what PostgREST calls it. */
+{
+  const { page } = await newPage({
+    inviteError: 'Could not find the function public.invite_app_user(grants, target_email) in the schema cache',
+  });
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  await page.click('#invite-toggle');
+  await page.fill('#invite-email', 'new@example.com');
+  await page.locator('#invite-apps .app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
+  await page.click('#invite-send');
+  await page.waitForSelector('#status.err', { timeout: 5000 });
+  const msg = await page.locator('#status').textContent();
+  if (/schema cache/i.test(msg)) problems.push(`the raw PostgREST wording reached the page: "${msg}"`);
+  if (!/not installed/i.test(msg)) problems.push(`a missing migration was not explained: "${msg}"`);
+  console.log('  ✓ a missing migration is explained rather than quoted');
+  await page.close();
+}
+
 /* 11b — deleting is offered only where the database would allow it. */
 {
   const { page } = await newPage();

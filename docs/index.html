@@ -98,6 +98,11 @@
     background: var(--line); color: var(--muted); font-weight: 600;
   }
 
+  /* Bottom of the card, small, and the only red thing on the page — findable
+     when wanted, never in the way of the grid. */
+  .user-actions { margin-top: 12px; }
+  button.link.danger { color: var(--danger); font-size: 13px; }
+
   .invite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   #invite-form .apps { margin-top: 14px; }
 
@@ -157,9 +162,11 @@
     <div class="card" id="users"></div>
     <footer>
       <p>Changes take effect the next time that person loads the app — no deploy needed.</p>
-      <p>Inviting creates the account through <code>invite_app_user</code>, which holds the
-         secret key in the database where the browser cannot reach it. This page still carries
-         only the publishable key. Deleting an account is still the Supabase dashboard.</p>
+      <p>Inviting and deleting go through <code>invite_app_user</code> and
+         <code>delete_app_user</code>, which hold the secret key in the database where the
+         browser cannot reach it. This page still carries only the publishable key.</p>
+      <p>Deleting is permanent and is refused for administrators and for yourself. To lock
+         someone out while keeping their data, set every app to None — that is reversible.</p>
       <p><button class="link" id="signout">Sign out</button></p>
     </footer>
   </section>
@@ -478,7 +485,46 @@ function render() {
       (role, label) => change(user.id, PLATFORM, role, label), true));
 
     block.append(head, meta, list, platformRow);
+
+    // Offered only where the database would allow it — not yourself, not
+    // another administrator. A control that is always refused teaches people
+    // to click through refusals, which is the opposite of what refusals are
+    // for. delete_app_user enforces both regardless of what this page shows.
+    if (user.id !== session.user?.id && platform?.role !== 'app_admin') {
+      const actions = document.createElement('div');
+      actions.className = 'user-actions';
+      const remove = document.createElement('button');
+      remove.className = 'link danger';
+      remove.type = 'button';
+      remove.textContent = 'Delete account';
+      remove.addEventListener('click', () => removeAccount(user.id, user.email));
+      actions.appendChild(remove);
+      block.appendChild(actions);
+    }
+
     container.appendChild(block);
+  }
+}
+
+/* ── Deleting ────────────────────────────────────────────────────────── */
+
+async function removeAccount(userId, email) {
+  // The one action on this page that cannot be undone. Everything else is a
+  // row that can be put back in a tap, which is why everything else settles
+  // for a status message and this does not.
+  if (!confirm(`Permanently delete ${email}?\n\n`
+    + 'The account and every grant it holds go immediately, and anything the apps store '
+    + 'against this person goes with them. There is no undo and no copy kept.\n\n'
+    + 'To lock them out but keep their data, set every app to None instead.')) return;
+
+  note(`Deleting ${email}…`, 'ok');
+  try {
+    await rpc('delete_app_user', { target_user_id: userId });
+    await loadEverything();
+    render();
+    note(`${email} deleted.`, 'ok');
+  } catch (error) {
+    note(error.message, 'err');
   }
 }
 

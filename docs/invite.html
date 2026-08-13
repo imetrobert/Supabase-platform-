@@ -169,9 +169,12 @@ const APPS = {
 };
 
 /* Mirrored from the project's own password settings, so a rule can be seen
- * before it is broken. The server is what enforces them — including the check
- * against known-breached passwords, which cannot be done here and is the one
- * rule this list does not show. */
+ * before it is broken. The server is what enforces them, and it may enforce
+ * more than this list shows: rejecting passwords found in known breaches is a
+ * project setting with no client-side equivalent, so where it is switched on,
+ * a password satisfying every rule here can still come back refused — and the
+ * server's message is the only place that rule is ever explained. Which is why
+ * the failure below is shown verbatim rather than replaced with our own. */
 const RULES = [
   ['At least 12 characters',      (v) => v.length >= 12],
   ['A lowercase letter',          (v) => /[a-z]/.test(v)],

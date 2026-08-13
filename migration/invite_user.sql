@@ -283,9 +283,15 @@ begin
   -- leaving someone who can sign in and see nothing at all. That is the safe
   -- direction to fail in, and it is visible — they appear in the grid with no
   -- access, and their grants can be set there by hand.
+  -- Aliased `g`, not `entry`: `entry` is a declared variable above, and reusing
+  -- it as a table alias here made every reference ambiguous — which PL/pgSQL
+  -- only discovers when the statement runs. It shipped, and it failed in the
+  -- worst place: after the invitation had gone out, so an account was created
+  -- and emailed and then its grants rolled back. Do not name a FROM alias after
+  -- a variable in this file.
   insert into public.app_access (user_id, app, role, granted_by)
-  select new_user_id, entry->>'app', entry->>'role', auth.uid()
-  from jsonb_array_elements(coalesce(grants, '[]'::jsonb)) entry
+  select new_user_id, g->>'app', g->>'role', auth.uid()
+  from jsonb_array_elements(coalesce(grants, '[]'::jsonb)) g
   on conflict (user_id, app) do update set role = excluded.role;
 
   get diagnostics applied = row_count;

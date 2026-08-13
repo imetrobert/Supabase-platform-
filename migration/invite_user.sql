@@ -56,12 +56,17 @@
 --    INSERT or UPDATE on vault.secrets is refused for everyone — the
 --    vault.* functions are SECURITY DEFINER and write where you cannot.
 --
---    THEN CHECK THE NAME LANDED. This is the step that catches all of it:
+--    THEN CHECK THE NAME LANDED, AND THAT A REAL KEY LANDED WITH IT:
 --
---      select id, name from vault.secrets where name = 'auth_secret_key';
+--      select name, left(decrypted_secret, 12) as starts_with,
+--             length(decrypted_secret) as len
+--      from vault.decrypted_secrets where name = 'auth_secret_key';
 --
---    One row, or the invite button will fail with "no vault secret named
---    auth_secret_key" no matter how correct the key itself is.
+--    One row, named exactly auth_secret_key, starting 'sb_secret_', and over
+--    forty characters long. A length near twenty-six means the placeholder
+--    above went in verbatim — which stores perfectly happily and fails much
+--    later, as "Invalid API key" from Auth. The function now refuses that
+--    case up front, but the check here is what saves the round trip.
 --
 --    To rotate it later:
 --
@@ -196,6 +201,20 @@ begin
 
   if secret_key is null then
     raise exception 'no vault secret named auth_secret_key — see the setup note in invite_user.sql';
+  end if;
+
+  -- The placeholder check, which exists because the placeholder went in for
+  -- real: 'sb_secret_PASTE_YOURS_HERE' is a well-formed string, it stores
+  -- cleanly, it sits under the right name, and every check upstream passes.
+  -- Only Auth knows it is nonsense, and all it says is "Invalid API key" —
+  -- which reads as a key that expired, not a key that was never pasted.
+  --
+  -- Length alone separates the two: real keys are comfortably past forty
+  -- characters, and nothing legitimate is anywhere near thirty.
+  if secret_key like '%PASTE%' or length(secret_key) < 30 then
+    raise exception 'the vault secret auth_secret_key is not a real key (% characters) — '
+      'the placeholder was probably stored instead of your secret key. Replace it with '
+      'vault.update_secret() and check the length is over forty.', length(secret_key);
   end if;
 
   -- Resolve the apps to names and addresses for the email body. Both shapes

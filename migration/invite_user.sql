@@ -74,10 +74,21 @@
 --        (select id from vault.secrets where name = 'auth_secret_key'),
 --        new_secret => 'sb_secret_THE_NEW_ONE');
 --
--- 3. Allow the page to be an invite destination, or every link in every
---    invitation email will bounce to the site root having consumed its token:
---    Authentication → URL Configuration → Redirect URLs →
---    https://access.imetrobert.com/invite.html
+-- 3. Both fields under Authentication → URL Configuration:
+--
+--    Redirect URLs → add https://access.imetrobert.com/invite.html
+--      Without this every invitation link bounces to the site root having
+--      already consumed its one-use token. Not recoverable — that invitation
+--      is spent.
+--
+--    Site URL → https://access.imetrobert.com
+--      Not used for the redirect, which is passed explicitly and wins. It is
+--      used in the PROSE of every stock auth email, and it defaults to
+--      http://localhost:3000. Left alone, an invitation reads "You have been
+--      invited to create a user on http://localhost:3000" while linking to a
+--      public domain — the shape of a phishing mail, and Gmail flags it as one
+--      in a banner above the message. The link works and the reader is being
+--      told not to trust it.
 --
 -- 4. Password rules, which are a project setting and not something this
 --    function or the page can enforce on their own:

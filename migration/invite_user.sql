@@ -36,16 +36,38 @@
 -- 2. The secret key, in the vault. Get it from Project Settings → API keys.
 --    Never paste it anywhere else — not into this file, not into the page.
 --
+--    NAME THE ARGUMENTS, and run it in a SQL Editor tab as `postgres`:
+--
 --      select vault.create_secret(
---        'sb_secret_REPLACE_ME',
---        'auth_secret_key',
---        'Supabase secret key. Read only by public.invite_app_user().');
+--        new_secret => 'sb_secret_REPLACE_ME',
+--        new_name   => 'auth_secret_key');
+--
+--    Both halves of that are scar tissue. The positional order of
+--    (secret, name, description) has varied between Vault versions, and
+--    getting it wrong fails SILENTLY in the worst way: the description lands
+--    in `name`, the lookup further down finds nothing, and the eventual error
+--    is about this function rather than about the secret. Naming them cannot
+--    go wrong. The description is omitted for the same reason — it is
+--    optional, and it is the argument that does the damage.
+--
+--    And run it in the editor, not the dashboard's AI assistant panel: that
+--    executes as a restricted role which cannot write to the vault, and
+--    reports the refusal as though the whole approach were wrong. Direct
+--    INSERT or UPDATE on vault.secrets is refused for everyone — the
+--    vault.* functions are SECURITY DEFINER and write where you cannot.
+--
+--    THEN CHECK THE NAME LANDED. This is the step that catches all of it:
+--
+--      select id, name from vault.secrets where name = 'auth_secret_key';
+--
+--    One row, or the invite button will fail with "no vault secret named
+--    auth_secret_key" no matter how correct the key itself is.
 --
 --    To rotate it later:
 --
 --      select vault.update_secret(
 --        (select id from vault.secrets where name = 'auth_secret_key'),
---        'sb_secret_THE_NEW_ONE');
+--        new_secret => 'sb_secret_THE_NEW_ONE');
 --
 -- 3. Allow the page to be an invite destination, or every link in every
 --    invitation email will bounce to the site root having consumed its token:

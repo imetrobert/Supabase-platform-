@@ -81,6 +81,35 @@
 --
 -- Anything it returns is a table whose rows survive their owner. That is not
 -- automatically wrong — but it should be a decision, not a discovery.
+--
+-- On 2026-08-13 it returned three, all in one app:
+--
+--   cartmatch_audit_records       user_id, no foreign key
+--   cartmatch_price_observations  user_id, no foreign key
+--   cartmatch_validations         user_id, no foreign key
+--
+-- cartmatch_user_prefs has the foreign key and cascades; these three do not.
+-- That inconsistency inside a single app is the actual defect — not the
+-- orphans, which are only its symptom. Under the personal shape an orphaned
+-- row is permanently unreachable: no auth.uid() will ever match a deleted
+-- account, so no policy can see it and nothing will ever clean it up.
+--
+-- Bringing them in line, once the orphan count for each is zero:
+--
+--   alter table public.cartmatch_price_observations
+--     add constraint cartmatch_price_observations_user_id_fkey
+--     foreign key (user_id) references auth.users(id) on delete cascade;
+--
+--   -- and the same for cartmatch_validations, and for
+--   -- cartmatch_audit_records IF an audit trail should die with its subject.
+--   -- That last one is a real question rather than a formality: cascading
+--   -- means deleting someone erases the record of what they did. Usually
+--   -- right, and the privacy-respecting default — but decide it rather than
+--   -- inherit it.
+--
+-- Counting existing orphans first is not optional. A table that already
+-- violates the constraint will refuse it, and the refusal is the useful
+-- answer: it means rows are already pointing at accounts that are gone.
 
 
 create or replace function public.delete_app_user(target_user_id uuid)

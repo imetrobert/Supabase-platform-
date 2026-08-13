@@ -33,7 +33,7 @@ which, and the audit queries.
 | `invoicing` | `invoices`, `survey_responses` | shared |
 | `etf` | 8 × `etf_*` | shared |
 | `job` | 7 × `job_*` | shared — [see below](#open) |
-| `cartmatch` | 3 × `cartmatch_*` | personal |
+| `cartmatch` | 5 × `cartmatch_*` | personal |
 | `fb-marketplace` | `profiles` | personal |
 
 `platform` is a reserved app name, not a real one. A row for it with role `app_admin` is

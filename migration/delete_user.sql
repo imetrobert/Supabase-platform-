@@ -44,6 +44,43 @@
 -- If that list contains anything you would not want to lose, do not deploy
 -- this function. Revoking every grant leaves the person unable to reach
 -- anything while keeping their data, and is reversible.
+--
+-- Run on 2026-08-13, that query answered:
+--
+--   auth.*                  eight tables, all CASCADE — sessions, identities,
+--                           mfa factors, one-time tokens. Housekeeping; this
+--                           is what deleting an account means.
+--   profiles                CASCADE — their fb-marketplace profile
+--   cartmatch_user_prefs    CASCADE — their price-checker preferences
+--   app_access.user_id      CASCADE — their grants, as intended
+--   app_access.granted_by   NO ACTION — see the note in the function
+--
+-- Two things follow. Personal data is limited to two rows in two apps, and
+-- everything else on the project — claims, invoices, the etf_* and job_*
+-- tables — is shared reference data that a deletion does not touch. And
+-- granted_by would have blocked deletions outright; the function clears it
+-- rather than letting that surface as a 500.
+--
+-- What that query CANNOT see is a user_id column with no foreign key behind
+-- it, which leaves rows orphaned instead of deleted — pointing at an account
+-- that no longer exists, invisible to every policy that joins on it. Worth
+-- checking alongside:
+--
+--   select c.relname as table_name, a.attname as column_name
+--   from pg_class c
+--   join pg_namespace n on n.oid = c.relnamespace
+--   join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+--   where n.nspname = 'public' and c.relkind = 'r'
+--     and a.attname in ('user_id', 'owner_id', 'created_by', 'granted_by')
+--     and not exists (
+--       select 1 from pg_constraint fk
+--       where fk.conrelid = c.oid and fk.contype = 'f'
+--         and a.attnum = any (fk.conkey)
+--         and fk.confrelid = 'auth.users'::regclass)
+--   order by 1, 2;
+--
+-- Anything it returns is a table whose rows survive their owner. That is not
+-- automatically wrong — but it should be a decision, not a discovery.
 
 
 create or replace function public.delete_app_user(target_user_id uuid)
@@ -115,6 +152,25 @@ begin
     raise exception 'the vault secret auth_secret_key is not a real key (% characters)',
       length(secret_key);
   end if;
+
+  -- app_access.granted_by references auth.users with NO ACTION, so every grant
+  -- this person handed out to somebody else blocks their deletion — and the
+  -- block happens inside the auth API, which reports it as a bare 500 rather
+  -- than as the foreign key error it is. Clearing the attribution first is what
+  -- makes the delete possible at all.
+  --
+  -- Safe to do before knowing whether the deletion succeeds: if the call below
+  -- fails we raise, and this update rolls back with it. It only sticks if the
+  -- account actually went.
+  --
+  -- Note what is lost — those grants keep their granted_at and lose their
+  -- granted_by, so they read as "granted, by someone no longer here". That is
+  -- unavoidable rather than chosen: the whole point of the operation is that
+  -- the person is gone. Rows where they granted to themselves are not touched,
+  -- because the cascade removes them anyway.
+  update public.app_access
+  set granted_by = null
+  where granted_by = target_user_id and user_id <> target_user_id;
 
   perform extensions.http_set_curlopt('CURLOPT_TIMEOUT', '15');
 

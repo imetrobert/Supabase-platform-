@@ -47,8 +47,32 @@ that person's next page load; there is no deploy. Source in `docs/`.
 The page holds only the publishable key and can do exactly what row level security
 allows the person signed into it to do. Its `is_platform_admin()` check is for showing a
 clear message, not for enforcement — the `app_access` policies are what actually refuse.
-It cannot create or delete accounts, because that needs a secret key and no secret key
-belongs in a browser.
+
+### Inviting someone
+
+**Invite** on that page takes an address and a set of apps, and does the whole thing in
+one call: creates the account, emails an invitation, and writes the grants. They choose a
+password at **https://access.imetrobert.com/invite.html**, and from then on they can sign
+in to exactly those apps and nothing else — which is not something the invitation
+arranges, but simply what `app_access` already means.
+
+They are told where those apps are, twice: the invitation email lists each one with its
+address, and so does the screen where they set their password. Both come from the same
+grant, so neither can advertise something they cannot open. All six apps have an address
+on file; an app that does not — a legacy grant, or one added before anyone updated the
+list — is still named, because a stale list must not be able to hide access that was
+granted.
+
+Creating an account needs the secret key, so it cannot happen in a browser. It happens in
+`public.invite_app_user()` instead, which holds the key in the vault, refuses anyone who
+is not a platform admin, and is the most dangerous function on the project — read the
+header of `migration/invite_user.sql` before changing it. **It needs one-time setup**
+(the vault secret, the redirect URL, the password rules); that file lists it.
+
+Two deliberate limits. An invitation cannot grant `platform` admin — invite them, then
+promote them from the grid, which asks first. And deleting an account is still the
+Supabase dashboard, because nothing here needs to delete one and a page that can is a
+page that can be tricked into it.
 
 Equivalent by hand, if the page is ever unavailable:
 
@@ -62,9 +86,12 @@ on conflict (user_id, app) do update set role = excluded.role;
 
 | | |
 |---|---|
-| `docs/` | the Access Rights page, served by GitHub Pages |
-| `tests/admin.test.mjs` | drives that page against a stubbed Supabase — `npm test` |
+| `docs/index.html` | the Access Rights page, served by GitHub Pages |
+| `docs/invite.html` | where an invitation email lands — sets the password, shows what they can now reach |
+| `email/invite.html` | the invitation email, which lives in the dashboard at runtime; this is the reviewable copy |
+| `tests/admin.test.mjs` | drives both pages against a stubbed Supabase — `npm test` |
 | `migration/app_access_pattern.sql` | the deployed access model |
+| `migration/invite_user.sql` | creates an account, invites it and grants it, in one call — **needs one-time setup** |
 | `migration/list_app_users.sql` | lets a platform admin list accounts; `auth.users` is not reachable through the API |
 | `migration/schema_claims.sql` | the verified `claims` table |
 | `migration/verify_access.sql` | proves a policy holds, by impersonating real accounts |
@@ -83,8 +110,16 @@ after changing its policies. Note that a refused `INSERT` **raises** rather than
 returning zero rows, so an unwrapped probe aborts the script and discards every result
 before it; `SELECT`, `UPDATE` and `DELETE` fail the opposite way, filtering silently.
 
-`migration/audit.sql` is the standing check — four queries, all of which should come
-back empty. Run it after touching any policy, view or grant.
+`migration/audit.sql` is the standing check — five queries, all of which should come
+back empty. Run it after touching any policy, view, grant or function.
+
+Check 5 is the newest and exists for the same reason as 3 and 4: a `security definer`
+function runs as its owner and sees past every policy here, so checks 1–4 can be clean
+while a function hands out their contents. It reports the two ways one goes wrong — an
+unpinned `search_path`, which lets the caller choose which table the function reads, and
+being executable by `anon`, which is the publishable key in public HTML. Alongside it is
+a listing query to read by eye, because "is this function meant to exist" is not
+something SQL can answer.
 
 **Checking policies is not enough, and believing it was cost us two real holes.** Views
 have no policies, so a policy audit cannot see them; and a view created without

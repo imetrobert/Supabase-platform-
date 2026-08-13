@@ -1,0 +1,42 @@
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5;color:#16181d;max-width:520px;margin:0 auto;padding:8px">
+
+  <h2 style="font-size:20px;margin:0 0 14px">You have been given access</h2>
+
+  <p style="margin:0 0 14px">
+    {{ if .Data.invited_by }}{{ .Data.invited_by }} has invited{{ else }}You have been invited{{ end }}
+    you to {{ .Email }}. Choose a password and you are in.
+  </p>
+
+  <p style="margin:0 0 22px">
+    <a href="{{ .ConfirmationURL }}"
+       style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:9px">
+      Choose your password
+    </a>
+  </p>
+
+  {{ if .Data.apps }}
+  <p style="margin:0 0 8px;color:#6b7280;font-size:13px">You will be able to sign in to these, and only these:</p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 22px">
+    {{ range .Data.apps }}
+    <tr>
+      <td style="padding:9px 0;border-top:1px solid #e3e6ea">
+        <strong style="font-weight:600">{{ .name }}</strong>{{ if eq .role "app_admin" }}<span style="color:#6b7280;font-size:13px"> — administrator</span>{{ end }}
+        {{ if .url }}<br><a href="{{ .url }}" style="color:#2563eb;font-size:14px;word-break:break-all">{{ .url }}</a>{{ end }}
+      </td>
+    </tr>
+    {{ end }}
+  </table>
+  {{ end }}
+
+  <p style="margin:0 0 14px;color:#6b7280;font-size:13px">
+    The same password works for all of them. Keep it in a password manager — it is
+    long on purpose, and there is no separate one per app.
+  </p>
+
+  <p style="margin:0;color:#6b7280;font-size:13px">
+    This link can be used once and expires. If it has, ask for another.
+    If you were not expecting this, ignore it — nothing happens until the link is used.
+  </p>
+
+</div>

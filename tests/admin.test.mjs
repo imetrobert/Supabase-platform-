@@ -19,13 +19,16 @@ await new Promise((r) => server.listen(PORT, r));
 
 const browser = await chromium.launch({ ...(fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {}) });
 
+/* The six apps the page lists, all of which now carry an address. */
+const APPS_WITH_URLS = 6;
+
 const USERS = [
   { id: 'u-robert', email: 'robert@imetrobert.com', created_at: '2026-05-09T00:00:00Z', last_sign_in_at: '2026-08-09T13:35:51Z' },
   { id: 'u-obou',   email: 'oboulian@gmail.com',    created_at: '2026-08-03T00:00:00Z', last_sign_in_at: '2026-08-03T00:00:00Z' },
   { id: 'u-sheldon',email: 'sheldonrozansky@gmail.com', created_at: '2026-08-02T00:00:00Z', last_sign_in_at: null },
 ];
 
-async function newPage({ isAdmin = true } = {}) {
+async function newPage({ isAdmin = true, inviteError = null } = {}) {
   const page = await browser.newPage();
   const writes = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
@@ -57,6 +60,17 @@ async function newPage({ isAdmin = true } = {}) {
 
   await page.route('**/rest/v1/rpc/list_app_users', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(isAdmin ? USERS : []) }));
+
+  await page.route('**/rest/v1/rpc/invite_app_user', (route) => {
+    const body = route.request().postDataJSON();
+    writes.push({ method: 'INVITE', body });
+    if (inviteError) {
+      return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: inviteError }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      user_id: 'u-new', email: body.target_email, granted: (body.grants || []).length,
+    }) });
+  });
 
   await page.route('**/rest/v1/app_access**', (route) => {
     const req = route.request();
@@ -106,6 +120,35 @@ const login = async (page, password = 'right') => {
     problems.push('a grant for an app missing from APPS was not shown — it would be invisible and unrevokable');
   }
   console.log('  ✓ a grant for an unlisted app is still shown, so it can be revoked');
+  await page.close();
+}
+
+/* 2b — every app in the grid links to itself, in a new tab. */
+{
+  const { page } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  const card = page.locator('.user').first();
+
+  const job = card.locator('.app-row', { hasText: 'Job Search' }).locator('a.app-url');
+  if (await job.getAttribute('href') !== 'https://jobs.imetrobert.com') {
+    problems.push(`Job Search linked to ${await job.getAttribute('href')}`);
+  }
+  // A stray tap on a link must not take a half-finished set of grants with it.
+  if (await job.getAttribute('target') !== '_blank') problems.push('an app link would navigate away from the page');
+  if (!(await job.getAttribute('rel'))?.includes('noopener')) problems.push('an app link opened a new tab without noopener');
+  if (await card.locator('.apps a.app-url').count() !== APPS_WITH_URLS) {
+    problems.push('not every app in the grid carries its address');
+  }
+
+  // A leftover grant has no address, and must still be legible rather than a
+  // bare id with nothing under it.
+  const legacy = page.locator('.app-row', { hasText: 'legacy-thing' }).first();
+  if (await legacy.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
+  if (!(await legacy.textContent()).includes('not listed in this page')) {
+    problems.push('an unlisted app lost the note explaining why it is there');
+  }
+  console.log('  ✓ every app links to itself in a new tab, and a leftover grant still explains itself');
   await page.close();
 }
 
@@ -198,6 +241,231 @@ const login = async (page, password = 'right') => {
   const msg = await page.locator('#signin-error').textContent();
   if (!msg.includes('Invalid login credentials')) problems.push(`unhelpful error: "${msg}"`);
   console.log('  ✓ a wrong password reports the server message');
+  await page.close();
+}
+
+/* 9 — inviting sends the address and the chosen apps, and nothing else. */
+{
+  const { page, writes } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  await page.click('#invite-toggle');
+  await page.fill('#invite-email', 'new@example.com');
+  await page.locator('#invite-apps .app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
+  await page.locator('#invite-apps .app-row', { hasText: 'ETF Tracker' }).locator('button', { hasText: 'Admin' }).click();
+  await page.click('#invite-send');
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Invitation sent'), { timeout: 5000 });
+
+  const invite = writes.find((w) => w.method === 'INVITE');
+  if (!invite) problems.push('the invite form sent nothing');
+  else {
+    if (invite.body.target_email !== 'new@example.com') problems.push(`invited the wrong address: ${invite.body.target_email}`);
+    const sent = JSON.stringify([...invite.body.grants].sort((a, b) => a.app.localeCompare(b.app)));
+    if (sent !== '[{"app":"etf","role":"app_admin"},{"app":"job","role":"member"}]') {
+      problems.push(`invited with the wrong access: ${sent}`);
+    }
+  }
+  // The form must not offer platform — the function refuses it, and a control
+  // that always fails is worse than no control.
+  if (await page.locator('#invite-apps').locator('text=Access Rights').count()) {
+    problems.push('the invite form offered platform admin, which invite_app_user refuses');
+  }
+  console.log('  ✓ inviting sends the address and exactly the apps chosen');
+  await page.close();
+}
+
+/* 10 — the form resets, so the next invitation cannot inherit this one's apps. */
+{
+  const { page, writes } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  await page.click('#invite-toggle');
+  await page.fill('#invite-email', 'first@example.com');
+  await page.locator('#invite-apps .app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
+  await page.click('#invite-send');
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Invitation sent'), { timeout: 5000 });
+
+  page.on('dialog', (d) => d.dismiss());
+  await page.click('#invite-toggle');
+  if (await page.inputValue('#invite-email')) problems.push('the address stayed in the form after sending');
+  const pressed = await page.locator('#invite-apps button[aria-pressed="true"]').allTextContents();
+  if (pressed.some((label) => label !== 'None')) {
+    problems.push(`the previous invitation's apps were still selected: ${pressed.join(', ')}`);
+  }
+  await page.click('#invite-send');
+  await page.waitForTimeout(400);
+  if (writes.filter((w) => w.method === 'INVITE').length !== 1) {
+    problems.push('inviting with no apps did not ask first, or sent anyway after being cancelled');
+  }
+  console.log('  ✓ the form resets, and inviting with no access asks first');
+  await page.close();
+}
+
+/* 11 — a refusal from the database is shown as it came. */
+{
+  const { page } = await newPage({ inviteError: 'robert@imetrobert.com already has an account — set their access from the grid instead' });
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  await page.click('#invite-toggle');
+  await page.fill('#invite-email', 'robert@imetrobert.com');
+  await page.locator('#invite-apps .app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
+  await page.click('#invite-send');
+  await page.waitForSelector('#status.err', { timeout: 5000 });
+  const msg = await page.locator('#status').textContent();
+  if (!msg.includes('already has an account')) problems.push(`the refusal was not shown: "${msg}"`);
+  if (await page.isDisabled('#invite-send')) problems.push('a failed invitation left the form unusable');
+  console.log('  ✓ a refused invitation shows the reason and lets you try again');
+  await page.close();
+}
+
+/* ── The page the invitation email lands on ──────────────────────────── */
+
+async function newInvitePage({ granted = [], updateFails = null } = {}) {
+  const page = await browser.newPage();
+  const calls = [];
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('Failed to load resource')) problems.push(`console: ${m.text()}`); });
+
+  await page.route('**/auth/v1/verify', (route) => {
+    calls.push({ method: 'VERIFY', body: route.request().postDataJSON() });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'tok-from-hash' }) });
+  });
+
+  await page.route('**/auth/v1/user', (route) => {
+    const req = route.request();
+    if (req.method() === 'PUT') {
+      calls.push({ method: 'PUT', body: req.postDataJSON(), auth: req.headers()['authorization'] });
+      if (updateFails) {
+        return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ message: updateFails }) });
+      }
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u-new', email: 'new@example.com' }) });
+  });
+
+  await page.route('**/rest/v1/app_access**', (route) => {
+    calls.push({ method: 'GRANTS', url: route.request().url() });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(granted) });
+  });
+
+  return { page, calls };
+}
+
+const STRONG = 'Correct-Horse-42';
+
+/* 12 — a weak password cannot be submitted, and the rules say why. */
+{
+  const { page } = await newInvitePage();
+  await page.goto(`http://localhost:${PORT}/invite.html#access_token=tok&type=invite`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#form-view:not(.hidden)', { timeout: 5000 });
+
+  await page.fill('#password', 'short');
+  await page.fill('#confirm', 'short');
+  if (!(await page.isDisabled('#save'))) problems.push('a five-character password could be submitted');
+  const met = await page.locator('.rules li.met').count();
+  if (met !== 1) problems.push(`"short" satisfied ${met} rules, expected only the lowercase one`);
+
+  await page.fill('#password', STRONG);
+  await page.fill('#confirm', STRONG);
+  if (await page.isDisabled('#save')) problems.push(`a password meeting every rule was still refused: ${STRONG}`);
+
+  // Mismatch is the slip that produces an account nobody can sign into.
+  await page.fill('#confirm', STRONG + 'x');
+  if (!(await page.isDisabled('#save'))) problems.push('a mistyped confirmation could be submitted');
+  console.log('  ✓ the password rules are enforced before anything is sent');
+  await page.close();
+}
+
+/* 13 — setting a password uses the invitation's session, and the token does
+        not stay in the address bar afterwards. */
+{
+  const { page, calls } = await newInvitePage({
+    granted: [
+      { app: 'job', role: 'member' },
+      { app: 'etf', role: 'app_admin' },
+      // Every app this page knows about now has an address, so the only way to
+      // reach the no-address path is an app it does not know — a legacy grant,
+      // or one added to the project before anyone updated this list.
+      { app: 'legacy-thing', role: 'member' },
+    ],
+  });
+  await page.goto(`http://localhost:${PORT}/invite.html#access_token=tok&type=invite`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#form-view:not(.hidden)', { timeout: 5000 });
+
+  if (page.url().includes('access_token')) problems.push('the access token was left in the address bar');
+  if (!(await page.locator('#for-whom').textContent()).includes('new@example.com')) {
+    problems.push('the page did not say who the invitation is for');
+  }
+
+  await page.fill('#password', STRONG);
+  await page.fill('#confirm', STRONG);
+  await page.click('#save');
+  await page.waitForSelector('#done-view:not(.hidden)', { timeout: 5000 });
+
+  const put = calls.find((c) => c.method === 'PUT');
+  if (!put) problems.push('no password was sent');
+  else {
+    if (put.body.password !== STRONG) problems.push('the wrong password was sent');
+    if (put.auth !== 'Bearer tok') problems.push(`the invitation session was not used: ${put.auth}`);
+  }
+
+  const shown = await page.locator('#access').textContent();
+  if (!shown.includes('Job Search') || !shown.includes('ETF Tracker')) {
+    problems.push(`the apps they were granted were not listed: "${shown}"`);
+  }
+  // The address is the point of this screen — a name alone tells someone they
+  // have something without telling them where it is.
+  const link = page.locator('#access a.app-url', { hasText: 'jobs.imetrobert.com' });
+  if (!(await link.count())) problems.push('the granted app was listed without its address');
+  else if (await link.getAttribute('href') !== 'https://jobs.imetrobert.com') {
+    problems.push(`the app link pointed somewhere else: ${await link.getAttribute('href')}`);
+  }
+  // An app this page has never heard of must still be named, not silently
+  // dropped — a stale list cannot be allowed to hide access that was granted.
+  const unknown = page.locator('#access li', { hasText: 'legacy-thing' });
+  if (!(await unknown.count())) problems.push('an app with no address on file vanished from the list');
+  if (await unknown.locator('a').count()) problems.push('an app with no address on file was given a link anyway');
+  if (!shown.includes('administrator')) problems.push('the admin role was not shown');
+
+  // Only what they were given. The read policy widens to the whole table for a
+  // platform admin, so leaving this to RLS would show an admin who landed here
+  // every grant on the project as though it were theirs.
+  const fetched = calls.find((c) => c.method === 'GRANTS');
+  if (!fetched?.url.includes('user_id=eq.u-new')) {
+    problems.push(`the granted apps were read unscoped: ${fetched?.url}`);
+  }
+  if (await page.locator('#access li').count() !== 3) {
+    problems.push('the list showed something other than the apps they were granted');
+  }
+  const stored = await page.evaluate(() => Object.keys(localStorage).length);
+  if (stored) problems.push('the invitation session was left in localStorage on a possibly shared device');
+  console.log('  ✓ the password is set on the invitation session, and nothing is left behind');
+  await page.close();
+}
+
+/* 14 — the token_hash form of the link works too. It is the shape Supabase
+        sends on some projects, and the one nobody would notice was broken. */
+{
+  const { page, calls } = await newInvitePage();
+  await page.goto(`http://localhost:${PORT}/invite.html?token_hash=abc123&type=invite`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#form-view:not(.hidden)', { timeout: 5000 });
+  const verify = calls.find((c) => c.method === 'VERIFY');
+  if (!verify) problems.push('a token_hash link was not exchanged for a session');
+  else if (verify.body.token_hash !== 'abc123' || verify.body.type !== 'invite') {
+    problems.push(`the wrong verification was sent: ${JSON.stringify(verify.body)}`);
+  }
+  console.log('  ✓ a token_hash invitation link is redeemed too');
+  await page.close();
+}
+
+/* 15 — an expired link says so instead of showing an empty form. */
+{
+  const { page } = await newInvitePage();
+  await page.goto(`http://localhost:${PORT}/invite.html#error=access_denied&error_description=Email+link+is+invalid+or+has+expired`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#bad-view:not(.hidden)', { timeout: 5000 });
+  const msg = await page.locator('#bad-message').textContent();
+  if (!msg.includes('invalid or has expired')) problems.push(`unclear expired-link message: "${msg}"`);
+  if (await page.locator('#form-view').isVisible()) problems.push('an expired link still showed the password form');
+  console.log('  ✓ an expired link explains itself');
   await page.close();
 }
 

@@ -412,8 +412,22 @@ async function change(userId, app, role, label) {
     await setRole(userId, app, role);
     note(`Saved — ${label}.`, 'ok');
   } catch (error) {
-    note(error.message, 'err');
+    note(humanise(error.message), 'err');
   }
+}
+
+/* Everything the database raises is already a sentence written for whoever is
+ * reading it, so it is shown as it came. The exception is PostgREST answering
+ * for a function that does not exist: "Could not find the function
+ * public.delete_app_user(target_user_id) in the schema cache" is precise and
+ * tells the reader nothing they can act on. What has actually happened is that
+ * a migration has not been run. */
+function humanise(message) {
+  if (/could not find the function/i.test(message)) {
+    return 'That part is not installed on the database yet — run the matching file from '
+      + 'migration/ in the Supabase SQL editor, then try again.';
+  }
+  return message;
 }
 
 function note(message, kind) {
@@ -524,7 +538,7 @@ async function removeAccount(userId, email) {
     render();
     note(`${email} deleted.`, 'ok');
   } catch (error) {
-    note(error.message, 'err');
+    note(humanise(error.message), 'err');
   }
 }
 
@@ -592,7 +606,7 @@ $('invite-form').addEventListener('submit', async (event) => {
       + `app${result.granted === 1 ? '' : 's'}. They appear below now, and can sign in `
       + 'once they have set a password.', 'ok');
   } catch (error) {
-    note(error.message, 'err');
+    note(humanise(error.message), 'err');
   } finally {
     $('invite-send').disabled = false;
   }

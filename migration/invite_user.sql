@@ -74,10 +74,21 @@
 --        (select id from vault.secrets where name = 'auth_secret_key'),
 --        new_secret => 'sb_secret_THE_NEW_ONE');
 --
--- 3. Allow the page to be an invite destination, or every link in every
---    invitation email will bounce to the site root having consumed its token:
---    Authentication → URL Configuration → Redirect URLs →
---    https://access.imetrobert.com/invite.html
+-- 3. Both fields under Authentication → URL Configuration:
+--
+--    Redirect URLs → add https://access.imetrobert.com/invite.html
+--      Without this every invitation link bounces to the site root having
+--      already consumed its one-use token. Not recoverable — that invitation
+--      is spent.
+--
+--    Site URL → https://access.imetrobert.com
+--      Not used for the redirect, which is passed explicitly and wins. It is
+--      used in the PROSE of every stock auth email, and it defaults to
+--      http://localhost:3000. Left alone, an invitation reads "You have been
+--      invited to create a user on http://localhost:3000" while linking to a
+--      public domain — the shape of a phishing mail, and Gmail flags it as one
+--      in a banner above the message. The link works and the reader is being
+--      told not to trust it.
 --
 -- 4. Password rules, which are a project setting and not something this
 --    function or the page can enforce on their own:
@@ -143,6 +154,8 @@ declare
   entry        jsonb;
   new_user_id  uuid;
   applied      int := 0;
+  err_code     text := '';
+  err_msg      text := '';
 begin
   -- The guard. First, and raising — see the note above.
   if not public.is_platform_admin() then
@@ -265,11 +278,45 @@ begin
   )::extensions.http_request);
 
   if response.status <> 200 then
-    -- Truncated: the body is an error message, but it arrived over a channel
-    -- carrying the secret key and there is no reason to relay it wholesale to
-    -- a browser.
-    raise exception 'invite refused by auth (%): %',
-      response.status, left(coalesce(response.content, ''), 200);
+    -- What Auth sends back is a JSON object meant for a program, and putting it
+    -- on screen unread told the person "invite refused by auth (429):
+    -- {"code":429,"error_code":"over_email_send_rate_limit","msg":...}" — which
+    -- names a real, ordinary, temporary situation in a way that reads like the
+    -- system broke. Every case below is something a person can act on, so each
+    -- one says what happened and what to do about it.
+    --
+    -- Parsed defensively: an error body is not guaranteed to be JSON at all,
+    -- and a page that fails while explaining a failure is the worst of both.
+    begin
+      err_code := coalesce(response.content::jsonb->>'error_code', '');
+      err_msg  := coalesce(response.content::jsonb->>'msg',
+                           response.content::jsonb->>'message', '');
+    exception when others then
+      err_code := '';
+      err_msg  := '';
+    end;
+
+    raise exception '%', case
+      when response.status = 429 or err_code = 'over_email_send_rate_limit' then
+        'Too many invitations in a short time. This is Supabase''s own limit on sending '
+        || 'email, not a limit of this page, and it clears on its own — try again in an hour. '
+        || 'Setting up custom SMTP removes it for good. No account was created.'
+      when response.status = 422 or err_code in ('email_exists', 'user_already_exists') then
+        target_email || ' already has an account. Set their access from the grid below instead.'
+      when response.status = 401 then
+        'Supabase would not accept the secret key. Whatever is in the vault is wrong, expired '
+        || 'or revoked — see the setup note at the top of invite_user.sql. No account was created.'
+      when response.status = 403 then
+        'Supabase refused the request. The key in the vault is a real key but is not allowed to '
+        || 'create accounts. No account was created.'
+      when response.status >= 500 then
+        'Supabase had a problem at its end (' || response.status || '). Nothing was created — '
+        || 'this is worth simply trying again in a few minutes.'
+      else
+        'The invitation was refused (' || response.status || ')'
+        || case when err_msg <> '' then ': ' || err_msg else '.' end
+        || ' No account was created.'
+    end;
   end if;
 
   new_user_id := (response.content::jsonb->>'id')::uuid;

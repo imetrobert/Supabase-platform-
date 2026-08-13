@@ -69,10 +69,22 @@ is not a platform admin, and is the most dangerous function on the project — r
 header of `migration/invite_user.sql` before changing it. **It needs one-time setup**
 (the vault secret, the redirect URL, the password rules); that file lists it.
 
-Two deliberate limits. An invitation cannot grant `platform` admin — invite them, then
-promote them from the grid, which asks first. And deleting an account is still the
-Supabase dashboard, because nothing here needs to delete one and a page that can is a
-page that can be tricked into it.
+An invitation cannot grant `platform` admin — invite them, then promote them from the
+grid, which asks first.
+
+### Deleting someone
+
+**Delete account** at the bottom of a person's card, through `public.delete_app_user()`.
+It refuses three things: yourself, another administrator, and an id that no longer
+exists. Removing an admin is therefore two deliberate steps — take their admin rights
+away in the grid, which is reversible and asks, and only then delete them.
+
+This is the one action here with no undo, and the grants are not the only thing that
+goes: anything the apps store against that person goes too, wherever a table cascades
+off `auth.users`. `migration/delete_user.sql` opens with the query that lists exactly
+what would be lost, and it is worth running before the first deletion rather than after.
+**To lock someone out while keeping their data, set every app to None** — that is
+reversible and takes a tap.
 
 Equivalent by hand, if the page is ever unavailable:
 
@@ -92,6 +104,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 | `tests/admin.test.mjs` | drives both pages against a stubbed Supabase — `npm test` |
 | `migration/app_access_pattern.sql` | the deployed access model |
 | `migration/invite_user.sql` | creates an account, invites it and grants it, in one call — **needs one-time setup** |
+| `migration/delete_user.sql` | deletes an account; opens with the query for what a deletion takes with it |
 | `migration/list_app_users.sql` | lets a platform admin list accounts; `auth.users` is not reachable through the API |
 | `migration/schema_claims.sql` | the verified `claims` table |
 | `migration/verify_access.sql` | proves a policy holds, by impersonating real accounts |

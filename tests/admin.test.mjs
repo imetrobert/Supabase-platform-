@@ -72,6 +72,14 @@ async function newPage({ isAdmin = true, inviteError = null } = {}) {
     }) });
   });
 
+  await page.route('**/rest/v1/rpc/delete_app_user', (route) => {
+    const body = route.request().postDataJSON();
+    writes.push({ method: 'DELETE_USER', body });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      user_id: body.target_user_id, email: 'gone@example.com', status: 200,
+    }) });
+  });
+
   await page.route('**/rest/v1/app_access**', (route) => {
     const req = route.request();
     if (req.method() === 'POST') {
@@ -315,6 +323,58 @@ const login = async (page, password = 'right') => {
   if (!msg.includes('already has an account')) problems.push(`the refusal was not shown: "${msg}"`);
   if (await page.isDisabled('#invite-send')) problems.push('a failed invitation left the form unusable');
   console.log('  ✓ a refused invitation shows the reason and lets you try again');
+  await page.close();
+}
+
+/* 11b — deleting is offered only where the database would allow it. */
+{
+  const { page } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+
+  // Robert is signed in and is the platform admin — both reasons to hide it,
+  // and the two the function refuses outright.
+  const self = page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first();
+  if (await self.locator('button.danger').count()) {
+    problems.push('the page offered to delete the account you are signed in as');
+  }
+  const other = page.locator('.user').filter({ hasText: 'sheldonrozansky@gmail.com' }).first();
+  if (!(await other.locator('button.danger').count())) {
+    problems.push('an ordinary account could not be deleted');
+  }
+  console.log('  ✓ delete is hidden for yourself and for administrators');
+  await page.close();
+}
+
+/* 11c — deleting asks first, and sends the id rather than the email. */
+{
+  const { page, writes } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  const card = page.locator('.user').filter({ hasText: 'sheldonrozansky@gmail.com' }).first();
+
+  // Cancelling must send nothing — this is the one action with no undo.
+  page.once('dialog', (d) => d.dismiss());
+  await card.locator('button.danger').click();
+  await page.waitForTimeout(400);
+  if (writes.length) problems.push('cancelling the confirmation still deleted the account');
+
+  page.once('dialog', (d) => {
+    if (!d.message().includes('sheldonrozansky@gmail.com')) {
+      problems.push('the confirmation did not name who was about to be deleted');
+    }
+    if (!/no undo/i.test(d.message())) problems.push('the confirmation did not say it is permanent');
+    d.accept();
+  });
+  await card.locator('button.danger').click();
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('deleted'), { timeout: 5000 });
+
+  const sent = writes.find((w) => w.method === 'DELETE_USER');
+  if (!sent) problems.push('confirming sent no delete');
+  else if (sent.body.target_user_id !== 'u-sheldon') {
+    problems.push(`deleted the wrong account: ${JSON.stringify(sent.body)}`);
+  }
+  console.log('  ✓ deleting names the account, asks first, and sends its id');
   await page.close();
 }
 

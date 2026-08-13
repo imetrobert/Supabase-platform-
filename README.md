@@ -41,8 +41,12 @@ what lets someone hand out grants.
 
 ## Managing access
 
-**https://access.imetrobert.com** — sign in, tap a cell, done. Changes take effect on
-that person's next page load; there is no deploy. Source in `docs/`.
+**https://access.imetrobert.com** — sign in, tap a person, tap a cell, done. Changes take
+effect on that person's next page load; there is no deploy. Source in `docs/`.
+
+Everyone is one collapsed line — address, how many apps they hold, when they were last
+here — because that list is the answer to "who can reach what", and reading it is what
+the page is opened for. Opening a person shows the grants, and is where they change.
 
 The page holds only the publishable key and can do exactly what row level security
 allows the person signed into it to do. Its `is_platform_admin()` check is for showing a

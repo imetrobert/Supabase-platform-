@@ -98,6 +98,13 @@ async function newPage({ isAdmin = true, inviteError = null } = {}) {
   return { page, writes };
 }
 
+/* Cards are collapsed until asked for, so anything inside one has to be opened
+ * before it can be clicked — the same as for a person using the page. */
+const openCard = async (card) => {
+  if (!(await card.evaluate((el) => el.open))) await card.locator('summary').click();
+  return card;
+};
+
 const login = async (page, password = 'right') => {
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle' });
   await page.fill('#email', 'robert@imetrobert.com');
@@ -136,7 +143,7 @@ const login = async (page, password = 'right') => {
   const { page } = await newPage();
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
-  const card = page.locator('.user').first();
+  const card = await openCard(page.locator('.user').first());
 
   const job = card.locator('.app-row', { hasText: 'Job Search' }).locator('a.app-url');
   if (await job.getAttribute('href') !== 'https://jobs.imetrobert.com') {
@@ -160,13 +167,42 @@ const login = async (page, password = 'right') => {
   await page.close();
 }
 
+/* 2c — cards start collapsed, say enough while closed, and survive a change. */
+{
+  const { page } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+
+  const alreadyOpen = await page.locator('.user[open]').count();
+  if (alreadyOpen) problems.push(`${alreadyOpen} cards were open before anyone asked`);
+
+  // Closed, a row still has to answer the question the page is opened to ask.
+  const summary = await page.locator('.user').first().locator('summary').textContent();
+  if (!/last sign-in|never signed in/.test(summary)) problems.push(`no sign-in history while collapsed: "${summary}"`);
+  if (!/\d+ apps?|no access/.test(summary)) problems.push(`no access summary while collapsed: "${summary}"`);
+
+  // The one that matters: every change re-renders the grid, and a card that
+  // slammed shut on each tap would make setting two roles miserable.
+  const card = await openCard(page.locator('.user').first());
+  await card.locator('.app-row', { hasText: 'ETF Tracker' }).locator('button', { hasText: 'Member' }).click();
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Saved'), { timeout: 5000 });
+  if (!(await page.locator('.user').first().evaluate((el) => el.open))) {
+    problems.push('setting a role closed the card it was set in');
+  }
+  if (await page.locator('.user').nth(1).evaluate((el) => el.open)) {
+    problems.push('a change opened somebody else’s card');
+  }
+  console.log('  ✓ cards start collapsed, summarise on one line, and stay open through a change');
+  await page.close();
+}
+
 /* 3 — granting an app sends an upsert with the right row. */
 {
   const { page, writes } = await newPage();
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
   // Sheldon is the third card; grant him Job Search (4th app row).
-  const card = page.locator('.user').nth(2);
+  const card = await openCard(page.locator('.user').nth(2));
   await card.locator('.app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
   await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Saved'), { timeout: 5000 });
   const post = writes.find((w) => w.method === 'POST');
@@ -187,7 +223,7 @@ const login = async (page, password = 'right') => {
   const { page, writes } = await newPage();
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
-  const card = page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first();
+  const card = await openCard(page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first());
   await card.locator('.app-row', { hasText: 'Claims Tracker' }).locator('button', { hasText: 'None' }).click();
   await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Saved'), { timeout: 5000 });
   const del = writes.find((w) => w.method === 'DELETE');
@@ -205,7 +241,7 @@ const login = async (page, password = 'right') => {
   const { page, writes } = await newPage();
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
-  const card = page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first();
+  const card = await openCard(page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first());
   await card.locator('.app-row', { hasText: 'Access Rights' }).locator('button', { hasText: 'No' }).click();
   await page.waitForSelector('#status.err', { timeout: 5000 });
   const msg = await page.locator('#status').textContent();
@@ -221,7 +257,7 @@ const login = async (page, password = 'right') => {
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
   page.on('dialog', (d) => d.dismiss());
-  const card = page.locator('.user').filter({ hasText: 'oboulian@gmail.com' }).first();
+  const card = await openCard(page.locator('.user').filter({ hasText: 'oboulian@gmail.com' }).first());
   await card.locator('.app-row', { hasText: 'Access Rights' }).locator('button', { hasText: 'Admin' }).click();
   await page.waitForTimeout(500);
   if (writes.length) problems.push('declining the confirmation still granted admin');
@@ -370,7 +406,7 @@ const login = async (page, password = 'right') => {
   const { page, writes } = await newPage();
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
-  const card = page.locator('.user').filter({ hasText: 'sheldonrozansky@gmail.com' }).first();
+  const card = await openCard(page.locator('.user').filter({ hasText: 'sheldonrozansky@gmail.com' }).first());
 
   // Cancelling must send nothing — this is the one action with no undo.
   page.once('dialog', (d) => d.dismiss());

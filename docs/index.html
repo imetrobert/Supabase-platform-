@@ -64,9 +64,29 @@
   button.link { border: none; background: none; color: var(--accent); padding: 4px 0; }
   button:disabled { opacity: .55; cursor: default; }
 
-  .user { border-top: 1px solid var(--line); padding: 14px 0; }
-  .user:first-of-type { border-top: none; padding-top: 4px; }
-  .user-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .user { border-top: 1px solid var(--line); }
+  .user:first-of-type { border-top: none; }
+  /* Collapsed, a person is one line: who they are, how much they hold, when
+     they were last here. That is the whole answer to "who can reach what",
+     and it is the question this page is opened to ask. The seven rows of
+     controls are for the rarer moment of changing something. */
+  .user > summary {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: baseline; gap: 4px 10px;
+    padding: 14px 0; cursor: pointer; list-style: none;
+  }
+  .user > summary::-webkit-details-marker { display: none; }
+  .user > summary::after {
+    content: "›"; font-size: 19px; line-height: .8; color: var(--muted);
+    justify-self: end; transform: rotate(90deg); transform-origin: center;
+  }
+  .user[open] > summary::after { transform: rotate(270deg); }
+  @media (prefers-reduced-motion: no-preference) {
+    .user > summary::after { transition: transform .15s ease; }
+  }
+  .user > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  .summary-meta { text-align: right; white-space: nowrap; }
+  .user > :last-child { padding-bottom: 14px; }
   .email { font-weight: 600; word-break: break-all; }
   .badge {
     display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px;
@@ -213,6 +233,10 @@ const $ = (id) => document.getElementById(id);
 let session = null;
 let users = [];
 let grants = [];
+
+/* Which cards are open, by user id. Held here rather than in the DOM
+ * because render() rebuilds the grid from scratch after every change. */
+const expanded = new Set();
 
 /* ── Supabase REST ───────────────────────────────────────────────────── */
 
@@ -446,10 +470,18 @@ function render() {
     const apps = appList();
     const held = apps.filter((a) => grantFor(user.id, a.id));
 
-    const block = document.createElement('div');
+    const block = document.createElement('details');
     block.className = 'user';
+    // Every change re-renders the whole grid, so expansion has to be state
+    // rather than DOM — otherwise setting a role slams shut the card you are
+    // working in, which is the one moment you certainly wanted it open.
+    block.open = expanded.has(user.id);
+    block.addEventListener('toggle', () => {
+      if (block.open) expanded.add(user.id);
+      else expanded.delete(user.id);
+    });
 
-    const head = document.createElement('div');
+    const head = document.createElement('summary');
     head.className = 'user-head';
     const left = document.createElement('div');
     left.innerHTML = `<span class="email"></span>`;
@@ -461,19 +493,18 @@ function render() {
       badge.style.marginLeft = '7px';
       left.appendChild(badge);
     }
-    const summary = document.createElement('div');
-    summary.className = 'muted';
-    summary.textContent = held.length
-      ? `${held.length} app${held.length > 1 ? 's' : ''}`
-      : 'no access';
-    head.append(left, summary);
 
+    // Both facts on the one line, because collapsed this is all there is —
+    // and "3 apps, never signed in" is a different situation from "3 apps,
+    // here yesterday" in a way that is worth seeing without opening anything.
     const meta = document.createElement('div');
-    meta.className = 'muted';
-    meta.style.marginTop = '2px';
-    meta.textContent = user.last_sign_in_at
-      ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}`
-      : 'never signed in';
+    meta.className = 'muted summary-meta';
+    meta.textContent = [
+      held.length ? `${held.length} app${held.length > 1 ? 's' : ''}` : 'no access',
+      user.last_sign_in_at ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}` : 'never signed in',
+    ].join(' · ');
+
+    head.append(left, meta);
 
     const list = document.createElement('div');
     list.className = 'apps';
@@ -498,7 +529,7 @@ function render() {
       [[null, 'No'], ['app_admin', 'Admin']],
       (role, label) => change(user.id, PLATFORM, role, label), true));
 
-    block.append(head, meta, list, platformRow);
+    block.append(head, list, platformRow);
 
     // Offered only where the database would allow it — not yourself, not
     // another administrator. A control that is always refused teaches people

@@ -86,6 +86,24 @@ header of `migration/invite_user.sql` before changing it. **It needs one-time se
 An invitation cannot grant `platform` admin — invite them, then promote them from the
 grid, which asks first.
 
+### How fast a revocation takes effect
+
+**Immediately.** Every policy calls `has_app_access()`, which reads `app_access` at query
+time, so deleting the row means the next query that person's app makes returns nothing.
+There is no cache to wait out. Deleting an account is the same mechanism — the grants
+cascade away — and it also cascades `auth.sessions`, so nothing can be refreshed.
+
+What survives is their access token, which is a signed JWT: PostgREST validates it by
+signature and expiry and never asks the database whether the account still exists. It
+stays valid for up to **Authentication → Sessions → Access token (JWT) expiry**, one hour
+by default. It opens nothing, because everything is gated on `app_access` — for exactly
+as long as everything really is gated, which has been false here twice.
+
+So revoking also ends that person's sessions, via `sign_out_app_user()`, which stops the
+token being renewed. It cannot revoke the token itself; nothing can, short of rotating the
+project's JWT secret, which signs out everyone. **Lowering the JWT expiry is the single
+setting that shortens every such window**, and it does more than any of this code.
+
 ### Deleting someone
 
 **Delete account** at the bottom of a person's card, through `public.delete_app_user()`.
@@ -119,6 +137,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 | `migration/app_access_pattern.sql` | the deployed access model |
 | `migration/invite_user.sql` | creates an account, invites it and grants it, in one call — **needs one-time setup** |
 | `migration/delete_user.sql` | deletes an account; opens with the query for what a deletion takes with it |
+| `migration/sign_out_user.sql` | ends someone's sessions, so a revocation cannot be waited out |
 | `migration/list_app_users.sql` | lets a platform admin list accounts; `auth.users` is not reachable through the API |
 | `migration/schema_claims.sql` | the verified `claims` table |
 | `migration/verify_access.sql` | proves a policy holds, by impersonating real accounts |

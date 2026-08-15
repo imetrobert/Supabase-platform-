@@ -72,6 +72,14 @@ async function newPage({ isAdmin = true, inviteError = null } = {}) {
     }) });
   });
 
+  await page.route('**/rest/v1/rpc/sign_out_app_user', (route) => {
+    const body = route.request().postDataJSON();
+    writes.push({ method: 'SIGN_OUT', body });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      user_id: body.target_user_id, sessions_ended: 1, tokens_revoked: 1,
+    }) });
+  });
+
   await page.route('**/rest/v1/rpc/delete_app_user', (route) => {
     const body = route.request().postDataJSON();
     writes.push({ method: 'DELETE_USER', body });
@@ -233,6 +241,35 @@ const login = async (page, password = 'right') => {
     if (!del.url.includes('app=eq.claims-tracker')) problems.push('delete did not scope to the app — it would revoke everything');
   }
   console.log('  ✓ revoking deletes only that one grant');
+  await page.close();
+}
+
+/* 4b — revoking also ends their sessions, so the revocation cannot be waited
+        out. Granting does not, and revoking your own does not. */
+{
+  const { page, writes } = await newPage();
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+
+  // Sheldon holds nothing: granting must not sign anybody out.
+  const other = await openCard(page.locator('.user').nth(2));
+  await other.locator('.app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'Member' }).click();
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Saved'), { timeout: 5000 });
+  if (writes.some((w) => w.method === 'SIGN_OUT')) problems.push('granting access signed somebody out');
+
+  // Revoking your own access must not log you out of the page you are using.
+  const self = await openCard(page.locator('.user').filter({ hasText: 'robert@imetrobert.com' }).first());
+  await self.locator('.app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'None' }).click();
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.startsWith('Saved'), { timeout: 5000 });
+  if (writes.some((w) => w.method === 'SIGN_OUT')) problems.push('revoking your own access signed you out');
+
+  // Revoking somebody else's does.
+  await other.locator('.app-row', { hasText: 'Job Search' }).locator('button', { hasText: 'None' }).click();
+  await page.waitForFunction(() => document.getElementById('status')?.textContent?.includes('Signed out'), { timeout: 5000 });
+  const out = writes.find((w) => w.method === 'SIGN_OUT');
+  if (!out) problems.push('revoking did not end their sessions');
+  else if (out.body.target_user_id !== 'u-sheldon') problems.push(`signed out the wrong account: ${out.body.target_user_id}`);
+  console.log('  ✓ revoking ends their sessions; granting and self-revoking do not');
   await page.close();
 }
 

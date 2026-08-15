@@ -434,9 +434,29 @@ async function change(userId, app, role, label) {
   note('Saving…', 'ok');
   try {
     await setRole(userId, app, role);
-    note(`Saved — ${label}.`, 'ok');
+    note(`Saved — ${label}.` + (await endSessions(userId, role, isSelf)), 'ok');
   } catch (error) {
     note(humanise(error.message), 'err');
+  }
+}
+
+/* Taking something away also ends that person's sessions, so the access token
+ * they are holding cannot be renewed. The revocation itself was already
+ * immediate — every policy reads app_access at query time — so this is not what
+ * closes the door. It is what stops them waiting out a door that was left ajar
+ * by a mis-gated table, which has happened here twice.
+ *
+ * Best effort, deliberately: the grant is already gone, and failing to sign
+ * somebody out is not a reason to make the caller think the revocation failed.
+ * Never for yourself — revoking your own access to one app should not log you
+ * out of the page you are standing in. */
+async function endSessions(userId, role, isSelf) {
+  if (role !== null || isSelf) return '';
+  try {
+    const result = await rpc('sign_out_app_user', { target_user_id: userId });
+    return result?.sessions_ended ? ' Signed out everywhere.' : '';
+  } catch {
+    return ' Their sessions could not be ended — the grant is gone either way.';
   }
 }
 

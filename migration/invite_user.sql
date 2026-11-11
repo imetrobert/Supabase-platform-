@@ -142,7 +142,6 @@ declare
     'invoicing',      jsonb_build_object('name', 'Invoicing',       'url', 'https://invoices.imetrobert.com'),
     'etf',            jsonb_build_object('name', 'ETF Tracker',     'url', 'https://etf.imetrobert.com'),
     'job',            jsonb_build_object('name', 'Job Search',      'url', 'https://jobs.imetrobert.com'),
-    'cartmatch',      jsonb_build_object('name', 'Price Checker',   'url', 'https://pricecheck.imetrobert.com'),
     'fb-marketplace', jsonb_build_object('name', 'Marketplace Ads', 'url', 'https://fbmarket.imetrobert.com')
   );
 

@@ -124,7 +124,6 @@ grant  execute on function public.is_platform_admin()   to authenticated;
 --   etf             8 × etf_*                                     shared
 --   invoicing       invoices, survey_responses                    shared
 --   job             7 × job_*                                     shared (1)
---   cartmatch       3 × cartmatch_*                               personal
 --   fb-marketplace  profiles                                      personal
 --
 --   (1) job is shared-shape today because it has one user. It is intended to be

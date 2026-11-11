@@ -33,7 +33,6 @@ which, and the audit queries.
 | `invoicing` | `invoices`, `survey_responses` | shared |
 | `etf` | 8 × `etf_*` | shared |
 | `job` | 7 × `job_*` | shared — [see below](#open) |
-| `cartmatch` | 5 × `cartmatch_*` | personal |
 | `fb-marketplace` | `profiles` | personal |
 
 `platform` is a reserved app name, not a real one. A row for it with role `app_admin` is
@@ -143,6 +142,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 | `migration/verify_access.sql` | proves a policy holds, by impersonating real accounts |
 | `migration/README.md` | the database migration that started all this, as built |
 | `migration/migrate.sh` | terminal-based project-to-project migration, for next time |
+| `migration/decommission_cartmatch.sql` | one-time removal of the retired CartMatch (Price Checker) objects; run once, then ignore |
 
 ## Verifying
 

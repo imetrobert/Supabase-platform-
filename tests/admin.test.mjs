@@ -20,7 +20,7 @@ await new Promise((r) => server.listen(PORT, r));
 const browser = await chromium.launch({ ...(fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {}) });
 
 /* The six apps the page lists, all of which now carry an address. */
-const APPS_WITH_URLS = 5;
+const APPS_WITH_URLS = 6;
 
 const USERS = [
   { id: 'u-robert', email: 'robert@imetrobert.com', created_at: '2026-05-09T00:00:00Z', last_sign_in_at: '2026-08-09T13:35:51Z' },

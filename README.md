@@ -34,6 +34,7 @@ which, and the audit queries.
 | `etf` | 8 × `etf_*` | shared |
 | `job` | 7 × `job_*` | shared — [see below](#open) |
 | `fb-marketplace` | `profiles` | personal |
+| `toolkit` | none (client data stays on the phone) | gate only: `has_app_access('toolkit')` |
 
 `platform` is a reserved app name, not a real one. A row for it with role `app_admin` is
 what lets someone hand out grants.

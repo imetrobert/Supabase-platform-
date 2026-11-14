@@ -143,7 +143,8 @@ declare
     'etf',            jsonb_build_object('name', 'ETF Tracker',     'url', 'https://etf.imetrobert.com'),
     'job',            jsonb_build_object('name', 'Job Search',      'url', 'https://jobs.imetrobert.com'),
     'fb-marketplace', jsonb_build_object('name', 'Marketplace Ads', 'url', 'https://fbmarket.imetrobert.com'),
-    'toolkit',        jsonb_build_object('name', 'AI with Robert Toolkit', 'url', 'https://toolkit.aiwithrobert.com')
+    'toolkit',        jsonb_build_object('name', 'AI with Robert Toolkit', 'url', 'https://toolkit.aiwithrobert.com'),
+    'blog-review',    jsonb_build_object('name', 'Blog Review', 'url', 'https://www.imetrobert.com/blog/staging/preview.html')
   );
 
   email_clean  text;

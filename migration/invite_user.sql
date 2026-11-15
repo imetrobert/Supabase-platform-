@@ -305,8 +305,10 @@ begin
       when response.status = 422 or err_code in ('email_exists', 'user_already_exists') then
         target_email || ' already has an account. Set their access from the grid below instead.'
       when response.status = 401 then
-        'Supabase would not accept the secret key. Whatever is in the vault is wrong, expired '
-        || 'or revoked — see the setup note at the top of invite_user.sql. No account was created.'
+        'Supabase would not accept the secret key in the vault (expired, rotated or deleted). No account was created. To fix: '
+        || '1) open https://supabase.com/dashboard/project/ipnajvgwtjrlecbqfwrh/settings/api-keys and create a new secret key; '
+        || '2) in the SQL editor run: select vault.update_secret((select id from vault.secrets where name = ''auth_secret_key''), new_secret => ''PASTE_THE_NEW_KEY'', new_name => ''auth_secret_key''); '
+        || '3) delete the old key on that page.'
       when response.status = 403 then
         'Supabase refused the request. The key in the vault is a real key but is not allowed to '
         || 'create accounts. No account was created.'

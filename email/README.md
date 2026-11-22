@@ -3,7 +3,11 @@
 `invite.html` is the body for **Authentication → Emails → Invite user** in the Supabase
 dashboard. Paste it in whole; there is nothing to build. Subject line:
 
-> You have been given access
+> You have been invited to an app
+
+The body names who was invited (`{{ .Email }}`), by whom, which apps, and has one button, "Click here to access", which is the set-your-password link. It applies to every invitation sent from the Access Rights page, for any app in the catalog.
+
+An account that already exists gets no email when you add an app to it (Supabase only mails new accounts); tell them the app address yourself.
 
 ## Why it is here and not only there
 

@@ -67,3 +67,6 @@ offers it on anyone else's row or on the invitation form, and the database (`mig
 `private_app_owner` + trigger `guard_private_app` on `app_access`) refuses any grant to a different user, even from the API or the invite function.
 To make another app private: add its id to `PRIVATE_APPS`, then in the Supabase AI assistant insert `(app, owner user_id)` into
 `public.private_app_owner`. To change the owner, update that row (use the assistant). Run `migration/audit.sql` afterwards.
+
+## Invitation link language (Quebec planner)
+The invite form shows "Link to send for the Quebec planner: English link / French link" once Quebec Retirement Planner is given a role. The choice travels as `lang` on that grant (`{app:'retire-qc', role, lang:'fr'}`); `invite_app_user` swaps the email link to retraiteqc.aiwithrobert.com when `lang` is `fr`. The function in the Supabase project must be updated for this (paste-ready prompt in the pull request that added it); until then every email carries the English link, harmlessly. `invite.html` always shows both links for this app.

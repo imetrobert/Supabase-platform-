@@ -247,7 +247,9 @@ begin
   into app_json, app_lines
   from (
     select coalesce(catalog -> (g->>'app') ->> 'name', g->>'app') as app_name,
-           catalog -> (g->>'app') ->> 'url'                       as app_url,
+           -- The Quebec planner has two addresses (same app, same login): the grid can ask for the French one.
+           case when g->>'app' = 'retire-qc' and g->>'lang' = 'fr' then 'https://retraiteqc.aiwithrobert.com'
+                else catalog -> (g->>'app') ->> 'url' end         as app_url,
            g->>'role'                                             as app_role
     from jsonb_array_elements(coalesce(grants, '[]'::jsonb)) g
   ) resolved;

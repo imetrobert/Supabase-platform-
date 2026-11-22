@@ -610,6 +610,7 @@ async function removeAccount(userId, email) {
  * until the invitation is sent, and it is cleared afterwards so the next
  * invitation cannot silently inherit the last one's access. */
 let inviteGrants = {};
+let inviteQcLang = 'en';   // which Quebec planner link the invitation email carries
 
 function renderInvite() {
   const container = $('invite-apps');
@@ -623,6 +624,20 @@ function renderInvite() {
       else inviteGrants[app.id] = role;
       renderInvite();
     }));
+    // The Quebec planner has an English and a French address: say which one goes in the email.
+    if (app.id === 'retire-qc' && inviteGrants[app.id]) {
+      const pick = document.createElement('div');
+      pick.className = 'app-row';
+      const label = document.createElement('div');
+      label.className = 'app-name';
+      label.textContent = 'Link to send for the Quebec planner';
+      pick.appendChild(label);
+      pick.appendChild(segment(inviteQcLang, [['en', 'English link'], ['fr', 'French link']], (value) => {
+        inviteQcLang = value;
+        renderInvite();
+      }, false));
+      container.appendChild(pick);
+    }
   }
 }
 
@@ -644,7 +659,7 @@ $('invite-toggle').addEventListener('click', () => {
 $('invite-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = $('invite-email').value.trim();
-  const grantList = Object.entries(inviteGrants).map(([app, role]) => ({ app, role }));
+  const grantList = Object.entries(inviteGrants).map(([app, role]) => (app === 'retire-qc' ? { app, role, lang: inviteQcLang } : { app, role }));
 
   // Not refused — an account with no access is a legitimate thing to create,
   // and it is also the likeliest slip on this form: fill in the address, send,
@@ -660,6 +675,7 @@ $('invite-form').addEventListener('submit', async (event) => {
     const result = await rpc('invite_app_user', { target_email: email, grants: grantList });
     $('invite-email').value = '';
     inviteGrants = {};
+    inviteQcLang = 'en';
     closeInvite();
     // The account exists from this moment, so it belongs in the grid now —
     // not once they get round to accepting.

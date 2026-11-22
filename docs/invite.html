@@ -389,6 +389,15 @@ async function showAccess() {
       link.textContent = app.url.replace(/^https?:\/\//, '');
       item.appendChild(link);
     }
+    // The Quebec planner also has a French address, same account and login.
+    if (row.app === 'retire-qc') {
+      item.appendChild(document.createElement('br'));
+      const fr = document.createElement('a');
+      fr.className = 'app-url';
+      fr.href = 'https://retraiteqc.aiwithrobert.com';
+      fr.textContent = 'Français : retraiteqc.aiwithrobert.com';
+      item.appendChild(fr);
+    }
     list.appendChild(item);
   }
   box.appendChild(list);

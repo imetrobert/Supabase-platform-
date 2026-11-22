@@ -544,6 +544,29 @@ function render() {
       if (PRIVATE_APPS.includes(app.id) && user.id !== session.user?.id && !grant) continue;
       list.appendChild(appRow(app, grant?.role ?? null,
         (role, label) => change(user.id, app.id, role, label)));
+      // Quebec planner: copy the English or French address to send to this person yourself.
+      if (app.id === 'retire-qc' && grant) {
+        const links = document.createElement('div');
+        links.className = 'app-row';
+        const lbl = document.createElement('div');
+        lbl.className = 'app-name';
+        lbl.textContent = 'Copy a link to send';
+        links.appendChild(lbl);
+        const seg = document.createElement('div');
+        seg.className = 'seg';
+        for (const [text, url] of [['English link', 'https://retireqc.aiwithrobert.com'], ['French link', 'https://retraiteqc.aiwithrobert.com']]) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = text;
+          b.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(url); note(`Copied ${url}`, 'ok'); }
+            catch { note(`Copy this link: ${url}`, 'ok'); }
+          });
+          seg.appendChild(b);
+        }
+        links.appendChild(seg);
+        list.appendChild(links);
+      }
     }
 
     const platformRow = document.createElement('div');

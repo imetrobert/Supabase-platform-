@@ -172,6 +172,16 @@ const login = async (page, password = 'right') => {
     problems.push('an unlisted app lost the note explaining why it is there');
   }
   console.log('  ✓ every app links to itself in a new tab, and a leftover grant still explains itself');
+  // A private app (the personal planner) is offered on the signed-in owner's own row only, never for anyone else.
+  const mine = await page.locator('.user', { hasText: 'robert@imetrobert.com' }).textContent();
+  const theirs = await page.locator('.user', { hasText: 'sheldonrozansky@gmail.com' }).textContent();
+  if (!mine.includes('Personal Retirement Planner')) problems.push('the personal planner is missing from your own row');
+  if (theirs.includes('Personal Retirement Planner')) problems.push('the personal planner is offered on someone else\'s row');
+  await page.click('#invite-toggle');
+  if (await page.locator('#invite-apps').textContent().then((t) => t.includes('Personal Retirement Planner'))) {
+    problems.push('the personal planner is offered on the invitation form');
+  }
+  console.log('  ✓ the personal planner is offered only on your own row, never for others or on an invitation');
   await page.close();
 }
 

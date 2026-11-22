@@ -212,6 +212,10 @@ const SUPABASE_ANON_KEY = 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go';
  * grant itself is just a row, and the app's own policies decide what it means.
  * Any app found in the data but missing here is appended automatically, so a
  * forgotten entry can never hide an existing grant. */
+/* Apps only ONE named account may ever hold. They are never offered for anyone else on this page
+ * (grid or invite form); the database refuses the grant too (migration/private_apps.sql). */
+const PRIVATE_APPS = ['retire-personal'];
+
 const APPS = [
   { id: 'claims-tracker',  name: 'Claims Tracker',   url: 'https://tax.imetrobert.com' },
   { id: 'invoicing',       name: 'Invoicing',        url: 'https://invoices.aiwithrobert.com' },
@@ -535,6 +539,9 @@ function render() {
 
     for (const app of apps) {
       const grant = grantFor(user.id, app.id);
+      // A private app is offered only on your own row. On anyone else's it appears only if they somehow
+      // already hold it, so it can be revoked, and never as something to hand out.
+      if (PRIVATE_APPS.includes(app.id) && user.id !== session.user?.id && !grant) continue;
       list.appendChild(appRow(app, grant?.role ?? null,
         (role, label) => change(user.id, app.id, role, label)));
     }
@@ -610,6 +617,7 @@ function renderInvite() {
   // APPS rather than appList(): an app that exists only as a leftover grant on
   // someone's account is not something to start handing out to new people.
   for (const app of APPS) {
+    if (PRIVATE_APPS.includes(app.id)) continue;   // never offered on an invitation
     container.appendChild(appRow(app, inviteGrants[app.id] ?? null, (role) => {
       if (role === null) delete inviteGrants[app.id];
       else inviteGrants[app.id] = role;

@@ -60,3 +60,10 @@ Run `migration/audit.sql` (five checks, all empty). For a new policy prove it wi
 ## 8. Update or run the tests
 `npm install` then `npm test` (Playwright, terminal needed). If no terminal, skip tests and
 check the page by hand: sign in, open a person, change a cell, open Invite.
+
+## Private app (only one named account may ever hold it)
+Today: `retire-personal` (the personal retirement planner). Two layers: the page (`PRIVATE_APPS` in `docs/index.html`) never
+offers it on anyone else's row or on the invitation form, and the database (`migration/private_apps.sql`: table
+`private_app_owner` + trigger `guard_private_app` on `app_access`) refuses any grant to a different user, even from the API or the invite function.
+To make another app private: add its id to `PRIVATE_APPS`, then in the Supabase AI assistant insert `(app, owner user_id)` into
+`public.private_app_owner`. To change the owner, update that row (use the assistant). Run `migration/audit.sql` afterwards.

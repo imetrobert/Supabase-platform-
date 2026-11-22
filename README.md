@@ -36,6 +36,9 @@ which, and the audit queries.
 | `fb-marketplace` | `profiles` | personal |
 | `toolkit` | none (client data stays on the phone) | gate only: `has_app_access('toolkit')` |
 | `blog-review` | none | gate only: `has_app_access('blog-review')` (imetrobert.github.io `blog/staging/gate.js`) |
+| `retire-qc` | `planner_profiles` (encrypted blobs) | personal rows: `user_id = auth.uid() and has_app_access(app)`; table made by `aiwithrobert-retireqc/migration/planner_profiles.sql` |
+| `retire-on` | `planner_profiles` | same table, `app = 'retire-on'` |
+| `retire-personal` | `planner_profiles` | same table, `app = 'retire-personal'`; grant ONLY to Robert |
 
 `platform` is a reserved app name, not a real one. A row for it with role `app_admin` is
 what lets someone hand out grants.

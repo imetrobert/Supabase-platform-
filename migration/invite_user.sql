@@ -146,7 +146,8 @@ declare
     'toolkit',        jsonb_build_object('name', 'AI with Robert Toolkit', 'url', 'https://toolkit.aiwithrobert.com'),
     'blog-review',    jsonb_build_object('name', 'Blog Review', 'url', 'https://www.imetrobert.com/blog/staging/preview.html'),
     'retire-qc',      jsonb_build_object('name', 'Quebec Retirement Planner',  'url', 'https://retireqc.aiwithrobert.com'),
-    'retire-on',      jsonb_build_object('name', 'Ontario Retirement Planner', 'url', 'https://retireon.aiwithrobert.com')
+    'retire-on',      jsonb_build_object('name', 'Ontario Retirement Planner', 'url', 'https://retireon.aiwithrobert.com'),
+    'retire-personal', jsonb_build_object('name', 'Personal Retirement Planner', 'url', 'https://retire.imetrobert.com')
   );
 
   email_clean  text;

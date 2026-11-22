@@ -139,7 +139,7 @@ declare
   -- public.app_catalog table that all three read.
   catalog constant jsonb := jsonb_build_object(
     'claims-tracker', jsonb_build_object('name', 'Claims Tracker',  'url', 'https://tax.imetrobert.com'),
-    'invoicing',      jsonb_build_object('name', 'Invoicing',       'url', 'https://invoices.imetrobert.com'),
+    'invoicing',      jsonb_build_object('name', 'Invoicing',       'url', 'https://invoices.aiwithrobert.com'),
     'etf',            jsonb_build_object('name', 'ETF Tracker',     'url', 'https://invest.imetrobert.com'),
     'job',            jsonb_build_object('name', 'Job Search',      'url', 'https://jobs.imetrobert.com'),
     'fb-marketplace', jsonb_build_object('name', 'Marketplace Ads', 'url', 'https://fbmarket.imetrobert.com'),

@@ -131,6 +131,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 
 | | |
 |---|---|
+| `CLAUDE.md`, `COMMON-EDITS.md` | the map for editing this repo, and step-by-step recipes (add an app, grant by hand, gate a table) |
 | `docs/index.html` | the Access Rights page, served by GitHub Pages |
 | `docs/invite.html` | where an invitation email lands — sets the password, shows what they can now reach |
 | `email/invite.html` | the invitation email, which lives in the dashboard at runtime; this is the reviewable copy |

@@ -3,7 +3,7 @@
 --
 -- auth.users is not reachable through PostgREST, by design — it holds password
 -- hashes, recovery tokens and confirmation state. This exposes four harmless
--- columns and nothing else, and only to a platform admin.
+-- columns (plus invite and confirmation dates) and nothing else, and only to a platform admin.
 --
 -- The `where public.is_platform_admin()` is the whole guard. For anyone else the
 -- function returns an empty set rather than raising, so a caller cannot even
@@ -14,19 +14,24 @@
 -- and every table reference is schema-qualified, so nothing here resolves
 -- against something a caller controls.
 
-create or replace function public.list_app_users()
+-- The return type changed (two columns added), so the old function is dropped first.
+drop function if exists public.list_app_users();
+
+create function public.list_app_users()
 returns table (
   id              uuid,
   email           text,
   created_at      timestamptz,
-  last_sign_in_at timestamptz
+  last_sign_in_at timestamptz,
+  invited_at      timestamptz,
+  confirmed_at    timestamptz
 )
 language sql
 stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select u.id, u.email::text, u.created_at, u.last_sign_in_at
+  select u.id, u.email::text, u.created_at, u.last_sign_in_at, u.invited_at, u.confirmed_at
   from auth.users u
   where public.is_platform_admin()
   order by u.email;

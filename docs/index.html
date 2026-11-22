@@ -529,7 +529,9 @@ function render() {
     meta.className = 'muted summary-meta';
     meta.textContent = [
       held.length ? `${held.length} app${held.length > 1 ? 's' : ''}` : 'no access',
-      user.last_sign_in_at ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}` : 'never signed in',
+      user.last_sign_in_at ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}`
+        : (user.invited_at && !user.confirmed_at) ? `invited ${user.invited_at.slice(0, 10)}, not accepted yet`
+        : user.confirmed_at ? 'accepted, not signed in yet' : 'never signed in',
     ].join(' · ');
 
     head.append(left, meta);

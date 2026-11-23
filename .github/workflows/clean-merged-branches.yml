@@ -11,6 +11,9 @@ on:
       dry_run:
         description: "List only, delete nothing (true/false)"
         default: "false"
+      extra_branches:
+        description: "Optional: exact branch names to delete even though they have their own commits (space separated). Use only for branches the owner has approved."
+        default: ""
 
 permissions:
   contents: write
@@ -25,6 +28,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           DRY: ${{ inputs.dry_run }}
+          EXTRA: ${{ inputs.extra_branches }}
         run: |
           set -u
           default=$(gh api "repos/$REPO" --jq .default_branch)
@@ -36,6 +40,11 @@ jobs:
           del=0; keep=0
           while read -r name sha; do
             case "$name" in "$default"|main|master|gh-pages) continue;; esac
+            if [ -n "$EXTRA" ] && printf '%s\n' $EXTRA | grep -qxF -- "$name"; then
+              if [ "$DRY" = "true" ]; then echo "would delete (named by owner): $name"; else
+                gh api -X DELETE "repos/$REPO/git/refs/heads/$name" >/dev/null && echo "deleted (named by owner): $name"; fi
+              del=$((del+1)); continue
+            fi
             if grep -qx -- "$name" open.txt; then echo "keep (open PR): $name"; keep=$((keep+1)); continue; fi
             if grep -qx -- "$name $sha" merged.txt; then
               if [ "$DRY" = "true" ]; then echo "would delete: $name"; else

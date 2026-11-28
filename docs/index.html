@@ -541,7 +541,11 @@ function render() {
     meta.textContent = [
       held.length ? `${held.length} app${held.length > 1 ? 's' : ''}` : 'no access',
       user.last_sign_in_at ? `last sign-in ${user.last_sign_in_at.slice(0, 10)}`
-        : (user.invited_at && !user.confirmed_at) ? `invited ${user.invited_at.slice(0, 10)}, not accepted yet`
+        : (user.invited_at && !user.confirmed_at)
+          // Auth stamps a new invited_at on every resend but never touches created_at, so a gap means "resent".
+          ? ((user.created_at && Date.parse(user.invited_at) - Date.parse(user.created_at) > 5 * 60 * 1000)
+              ? `invited ${user.created_at.slice(0, 10)}, resent ${user.invited_at.slice(0, 10)}, not accepted yet`
+              : `invited ${user.invited_at.slice(0, 10)}, not accepted yet`)
         : user.confirmed_at ? 'accepted, not signed in yet' : 'never signed in',
     ].join(' · ');
 

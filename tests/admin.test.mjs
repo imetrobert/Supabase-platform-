@@ -416,6 +416,7 @@ const login = async (page, password = 'right') => {
   const pending = [
     ...USERS,
     { id: 'u-pending', email: 'pending@example.com', created_at: '2026-11-21T00:00:00Z', invited_at: '2026-11-21T00:00:00Z', confirmed_at: null, last_sign_in_at: null },
+    { id: 'u-resent', email: 'resent@example.com', created_at: '2026-11-21T00:00:00Z', invited_at: '2026-11-27T12:00:00Z', confirmed_at: null, last_sign_in_at: null },
   ];
   await page.route('**/rest/v1/rpc/list_app_users', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pending) }));
@@ -427,8 +428,12 @@ const login = async (page, password = 'right') => {
   page.on('dialog', (d) => d.accept());
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  const first = await page.locator('details.user', { hasText: 'pending@example.com' }).locator('.summary-meta').textContent();
+  const again = await page.locator('details.user', { hasText: 'resent@example.com' }).locator('.summary-meta').textContent();
+  if (!again.includes('resent 2026-11-27')) problems.push(`a resent invitation was not labelled: "${again}"`);
+  if (first.includes('resent')) problems.push(`a first invitation was labelled resent: "${first}"`);
   const buttons = await page.locator('button', { hasText: 'Resend invitation' }).count();
-  if (buttons !== 1) problems.push(`expected exactly one "Resend invitation" button (the pending person), found ${buttons}`);
+  if (buttons !== 2) problems.push(`expected two "Resend invitation" buttons (the two pending people), found ${buttons}`);
   await page.locator('details.user', { hasText: 'pending@example.com' }).locator('summary').click();
   await page.locator('button', { hasText: 'Resend invitation' }).click();
   await page.waitForSelector('#status.ok:has-text("Resend requested")', { timeout: 5000 });

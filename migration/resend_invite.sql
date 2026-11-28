@@ -44,6 +44,7 @@ declare
   app_json     jsonb;
   app_lines    text;
   fr_qc        boolean;
+  req_id       bigint;
 begin
   -- The guard. First, and raising.
   if not public.is_platform_admin() then
@@ -98,15 +99,58 @@ begin
 
   -- Queued through pg_net, NOT sent inline: a signed-in caller's statements are cut off at 8 seconds, and Auth sends the
   -- email through SMTP, which can take longer. The request runs in the background right after this call returns.
-  perform net.http_post(
+  req_id := net.http_post(
     url     := project_url || '/auth/v1/invite?redirect_to=' || extensions.urlencode(redirect_url),
     headers := jsonb_build_object('Content-Type', 'application/json', 'apikey', secret_key, 'Authorization', 'Bearer ' || secret_key),
     body    := jsonb_build_object('email', u.email)
   );
 
-  return jsonb_build_object('user_id', target_user_id, 'email', u.email, 'apps', jsonb_array_length(app_json), 'queued', true);
+  return jsonb_build_object('user_id', target_user_id, 'email', u.email, 'apps', jsonb_array_length(app_json), 'queued', true, 'request_id', req_id);
 end;
 $$;
+
+-- Reports what Supabase answered to a queued resend, so the page can say "sent" or "rate limited" a few seconds after the tap.
+-- Returns only the status and Supabase's own error code and message (never the response body, which carries the user record).
+-- pg_net keeps responses for a few hours; a request with no response yet comes back as pending.
+create or replace function public.resend_invite_status(request_id bigint)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  r net._http_response%rowtype;
+  body jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'not authorised'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  select * into r from net._http_response where id = request_id;
+  if not found then
+    return jsonb_build_object('state', 'pending');
+  end if;
+
+  begin
+    body := r.content::jsonb;
+  exception when others then
+    body := '{}'::jsonb;
+  end;
+
+  return jsonb_build_object(
+    'state',      case when r.status_code = 200 then 'sent' else 'refused' end,
+    'status',     r.status_code,
+    'error_code', coalesce(body->>'error_code', ''),
+    'message',    coalesce(body->>'msg', body->>'message', r.error_msg, '')
+  );
+end;
+$$;
+
+revoke execute on function public.resend_invite_status(bigint) from public, anon;
+grant  execute on function public.resend_invite_status(bigint) to authenticated;
+grant  execute on function public.resend_invite_status(bigint) to service_role;
 
 -- Data API grants (explicit, as the repo rule requires): signed-in users may call it, and the guard above decides who is obeyed.
 revoke execute on function public.resend_app_invite(uuid) from public, anon;

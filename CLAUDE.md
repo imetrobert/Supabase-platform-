@@ -17,6 +17,9 @@ only the section you need. Recipes for the usual edits: `COMMON-EDITS.md`.
   `has_app_access('<app>')` (see `migration/app_access_pattern.sql` for the two policy shapes).
 - Free tier only.
 
+## App ids (used in `app_access` and policies)
+`claims-tracker`, `invoicing`, `etf`, `job`, `fb-marketplace`, `toolkit`, `blog-review`, `retire-qc` (Quebec planner), `retire-on` (Ontario planner), `retire-personal`. Granting or locking out someone is a tap on the page; SQL is a last resort and goes to Robert as a prompt for the Supabase AI assistant.
+
 ## Where things are
 - `docs/index.html` — the page. `APPS` array near the top lists every app (id, name, url).
 - `docs/invite.html` — where an invitation lands; has its own `APPS` map.

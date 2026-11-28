@@ -1,0 +1,11 @@
+# Monthly, grouped update of the GitHub Actions the workflows use (checkout, setup-python, ...).
+# Each one arrives as ONE pull request. Green checks = merge it (Merge pull request). Red = leave it and ask Claude to look.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]

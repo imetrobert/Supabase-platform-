@@ -36,3 +36,5 @@ only the section you need. Recipes for the usual edits: `COMMON-EDITS.md`.
 - Add, rename or move an app: FOUR catalog copies must match (index.html, invite.html, invite_user.sql, resend_invite.sql). See COMMON-EDITS.md.
 - Grant or revoke by hand: SQL in COMMON-EDITS.md, or the page itself.
 - Never edit `docs/index.html` wholesale; change the one block.
+
+If something breaks (red check, failed run, no access): `docs/if-something-breaks.md` (open it first).

@@ -409,6 +409,34 @@ const login = async (page, password = 'right') => {
   await page.close();
 }
 
+/* 11b — a person who never accepted can be sent the invitation again; one who did cannot. */
+{
+  const { page } = await newPage();
+  const calls = [];
+  const pending = [
+    ...USERS,
+    { id: 'u-pending', email: 'pending@example.com', created_at: '2026-11-21T00:00:00Z', invited_at: '2026-11-21T00:00:00Z', confirmed_at: null, last_sign_in_at: null },
+  ];
+  await page.route('**/rest/v1/rpc/list_app_users', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pending) }));
+  await page.route('**/rest/v1/rpc/resend_app_invite', (route) => {
+    const body = route.request().postDataJSON();
+    calls.push(body);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: body.target_user_id, email: 'pending@example.com', apps: 2 }) });
+  });
+  page.on('dialog', (d) => d.accept());
+  await login(page);
+  await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
+  const buttons = await page.locator('button', { hasText: 'Resend invitation' }).count();
+  if (buttons !== 1) problems.push(`expected exactly one "Resend invitation" button (the pending person), found ${buttons}`);
+  await page.locator('details.user', { hasText: 'pending@example.com' }).locator('summary').click();
+  await page.locator('button', { hasText: 'Resend invitation' }).click();
+  await page.waitForSelector('#status.ok:has-text("resent")', { timeout: 5000 });
+  if (calls.length !== 1 || calls[0].target_user_id !== 'u-pending') problems.push(`resend sent the wrong request: ${JSON.stringify(calls)}`);
+  console.log('  ✓ a pending person can be sent the invitation again (and only a pending one)');
+  await page.close();
+}
+
 /* 11a — a missing migration says what to do, not what PostgREST calls it. */
 {
   const { page } = await newPage({

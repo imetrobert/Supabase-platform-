@@ -602,6 +602,18 @@ function render() {
     // another administrator. A control that is always refused teaches people
     // to click through refusals, which is the opposite of what refusals are
     // for. delete_app_user enforces both regardless of what this page shows.
+    const pending = user.invited_at && !user.confirmed_at;
+    if (pending && user.id !== session.user?.id) {
+      const actions = document.createElement('div');
+      actions.className = 'user-actions';
+      const resend = document.createElement('button');
+      resend.className = 'link';
+      resend.type = 'button';
+      resend.textContent = 'Resend invitation';
+      resend.addEventListener('click', () => resendInvite(user.id, user.email, resend));
+      actions.appendChild(resend);
+      block.appendChild(actions);
+    }
     if (user.id !== session.user?.id && platform?.role !== 'app_admin') {
       const actions = document.createElement('div');
       actions.className = 'user-actions';
@@ -615,6 +627,26 @@ function render() {
     }
 
     container.appendChild(block);
+  }
+}
+
+/* ── Resending an invitation (people who never accepted) ───────────────── */
+
+async function resendInvite(userId, email, button) {
+  // Sends a real email, so it asks once. The database refuses anyone who already accepted.
+  if (!confirm(`Resend the invitation to ${email}?\n\n`
+    + 'They get a new email with a fresh link listing the apps they hold now. '
+    + 'An older unused link may stop working.')) return;
+  button.disabled = true;
+  note(`Resending the invitation to ${email}…`, 'ok');
+  try {
+    const result = await rpc('resend_app_invite', { target_user_id: userId });
+    await loadEverything();
+    render();
+    note(`Invitation resent to ${result.email}, listing ${result.apps} app${result.apps === 1 ? '' : 's'}.`, 'ok');
+  } catch (error) {
+    note(humanise(error.message), 'err');
+    button.disabled = false;
   }
 }
 

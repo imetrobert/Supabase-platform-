@@ -10,6 +10,7 @@ An app is just a text id in `app_access.app`. Pick the id (lowercase, e.g. `plan
 3. **The invitation function:** `migration/invite_user.sql`, add one `jsonb_build_object` line to
    `catalog`. Then run the WHOLE file's `create or replace function` block in the Supabase SQL
    editor (editing the file alone changes nothing live).
+   Do the same for `migration/resend_invite.sql` (its own `catalog` copy).
 4. **The test:** `tests/admin.test.mjs`, raise `APPS_WITH_URLS` by one.
 5. **The README table** ("The apps") — add a row.
 6. In the new app's own repo: tables use `has_app_access('planners')` (see recipe 5).
@@ -71,3 +72,6 @@ To make another app private: add its id to `PRIVATE_APPS`, then in the Supabase 
 ## Invitation link language (Quebec planner)
 The invite form shows "Link to send for the Quebec planner: English link / French link" once Quebec Retirement Planner is given a role. The choice travels as `lang` on that grant (`{app:'retire-qc', role, lang:'fr'}`); `invite_app_user` swaps the email link to retraiteqc.aiwithrobert.com when `lang` is `fr`. The function in the Supabase project must be updated for this (paste-ready prompt in the pull request that added it); until then every email carries the English link, harmlessly. `invite.html` always shows both links for this app.
 In the grid, anyone holding the Quebec planner has "Copy a link to send" with English and French buttons (copies retireqc / retraiteqc.aiwithrobert.com).
+
+## Resend an invitation (people who never accepted)
+The grid shows "invited YYYY-MM-DD, not accepted yet" for such people, and their card has a **Resend invitation** button (not on your own row). It calls `public.resend_app_invite(target_user_id)` from `migration/resend_invite.sql`: admin-only guard first, refuses anyone who already accepted or was never invited, shares the 10-per-hour brake with `invite_app_user`, refreshes the "apps" list in the email from the person's CURRENT grants, then asks Auth to send the invite again (new link). Keeps the French Quebec link if the first email used it. The function holds a FOURTH copy of the app catalog: recipes 1 and 2 must also edit it (and re-run the function in SQL). If the person lost an already-accepted invite, use "Forgot password" in the app instead; do not delete them.

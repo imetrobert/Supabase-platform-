@@ -107,10 +107,19 @@ select p.proname as definer_function,
             then 'callable by anon' else 'search_path not pinned' end as why
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and p.prosecdef
+  -- Public on purpose (website forms, token links, public data), reviewed 2026-11-27. Anything NEW that anon can
+  -- run still shows up. Add a name here only after deciding the public key SHOULD reach it, and say why in a comment.
+  and p.proname not in ('join_waitlist', 'submit_inquiry', 'track_hit',
+                        'public_caps', 'public_testimonials', 'site_capacity',
+                        'invoice_by_token', 'increment_invoice_view', 'increment_invoice_pdf_download')
   and (has_function_privilege('anon', p.oid, 'EXECUTE')
        or not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c
                       where c like 'search\_path=%'))
 order by 1;
+
+--    Reviewed 2026-11-27: app_quota, app_run_limit, app_runs_today, app_session and guard_private_app had anon access
+--    removed (revoke from public, anon). public.email_send_log is gated by has_app_access('invoicing'), not
+--    auth.role() = 'authenticated' (check 2 now returns no rows).
 
 --    The companion to that check is reading the list itself, which no query can
 --    do for you. There should be five, they should all be recognisable, and

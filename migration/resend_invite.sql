@@ -10,6 +10,7 @@
 -- send the invitation again. Auth issues a new link; an older unused link may stop working, which is the point.
 -- It refuses anyone who already accepted (they use "forgot password" instead) and anyone never invited.
 --
+-- The send is queued (pg_net), so Supabase's own refusals (rate limit etc.) are not shown here; check the invited date on the card.
 -- It shares the invite function's brake: no more than 10 invitations or resends in an hour.
 -- The app catalog below is a FOURTH copy (page grid, invite page, invite_app_user, here): any app rename or new address
 -- must be edited here too (docs: COMMON-EDITS.md recipes 1 and 2). An app missing from it still appears by its raw id.
@@ -40,12 +41,9 @@ declare
   );
   u            auth.users%rowtype;
   secret_key   text;
-  response     extensions.http_response;
   app_json     jsonb;
   app_lines    text;
   fr_qc        boolean;
-  err_code     text := '';
-  err_msg      text := '';
 begin
   -- The guard. First, and raising.
   if not public.is_platform_admin() then
@@ -98,38 +96,15 @@ begin
                               || jsonb_build_object('apps', app_json, 'app_list', coalesce(app_lines, ''))
    where id = target_user_id;
 
-  perform extensions.http_set_curlopt('CURLOPT_TIMEOUT', '15');
+  -- Queued through pg_net, NOT sent inline: a signed-in caller's statements are cut off at 8 seconds, and Auth sends the
+  -- email through SMTP, which can take longer. The request runs in the background right after this call returns.
+  perform net.http_post(
+    url     := project_url || '/auth/v1/invite?redirect_to=' || extensions.urlencode(redirect_url),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'apikey', secret_key, 'Authorization', 'Bearer ' || secret_key),
+    body    := jsonb_build_object('email', u.email)
+  );
 
-  select * into response from extensions.http((
-    'POST',
-    project_url || '/auth/v1/invite?redirect_to=' || extensions.urlencode(redirect_url),
-    array[extensions.http_header('apikey', secret_key), extensions.http_header('Authorization', 'Bearer ' || secret_key)],
-    'application/json',
-    jsonb_build_object('email', u.email)::text
-  )::extensions.http_request);
-
-  if response.status <> 200 then
-    begin
-      err_code := coalesce(response.content::jsonb->>'error_code', '');
-      err_msg  := coalesce(response.content::jsonb->>'msg', response.content::jsonb->>'message', '');
-    exception when others then
-      err_code := ''; err_msg := '';
-    end;
-    raise exception '%', case
-      when response.status = 429 or err_code = 'over_email_send_rate_limit' then
-        'Too many emails in a short time. This is Supabase''s own sending limit and it clears on its own: try again in an hour. Nothing was changed.'
-      when response.status = 422 or err_code in ('email_exists', 'user_already_exists') then
-        u.email || ' already has a confirmed account, so there is nothing to resend.'
-      when response.status = 401 then
-        'Supabase would not accept the secret key in the vault (expired, rotated or deleted). See the fix steps in invite_user.sql.'
-      when response.status >= 500 then
-        'Supabase had a problem at its end (' || response.status || '). Try again in a few minutes.'
-      else
-        'The invitation was refused (' || response.status || ')' || case when err_msg <> '' then ': ' || err_msg else '.' end
-    end;
-  end if;
-
-  return jsonb_build_object('user_id', target_user_id, 'email', u.email, 'apps', jsonb_array_length(app_json));
+  return jsonb_build_object('user_id', target_user_id, 'email', u.email, 'apps', jsonb_array_length(app_json), 'queued', true);
 end;
 $$;
 

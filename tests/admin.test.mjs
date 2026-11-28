@@ -431,7 +431,7 @@ const login = async (page, password = 'right') => {
   if (buttons !== 1) problems.push(`expected exactly one "Resend invitation" button (the pending person), found ${buttons}`);
   await page.locator('details.user', { hasText: 'pending@example.com' }).locator('summary').click();
   await page.locator('button', { hasText: 'Resend invitation' }).click();
-  await page.waitForSelector('#status.ok:has-text("resent")', { timeout: 5000 });
+  await page.waitForSelector('#status.ok:has-text("Resend requested")', { timeout: 5000 });
   if (calls.length !== 1 || calls[0].target_user_id !== 'u-pending') problems.push(`resend sent the wrong request: ${JSON.stringify(calls)}`);
   console.log('  ✓ a pending person can be sent the invitation again (and only a pending one)');
   await page.close();

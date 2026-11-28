@@ -504,7 +504,12 @@ function render() {
   const container = $('users');
   container.innerHTML = '';
 
-  for (const user of users) {
+  // Administrators first (display order only), then everyone else by email.
+  const isAdminUser = (u) => grantFor(u.id, PLATFORM)?.role === 'app_admin';
+  const ordered = [...users].sort((a, b) =>
+    (isAdminUser(b) - isAdminUser(a)) || String(a.email).localeCompare(String(b.email)));
+
+  for (const user of ordered) {
     const platform = grantFor(user.id, PLATFORM);
     const apps = appList();
     const held = apps.filter((a) => grantFor(user.id, a.id));

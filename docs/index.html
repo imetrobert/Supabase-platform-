@@ -648,10 +648,11 @@ async function resendInvite(userId, email, button) {
     note(`Resend queued for ${result.email}. Checking what Supabase answers…`, 'ok');
     // The send runs in the background, so ask for its answer for up to about 20 seconds.
     let answer = { state: 'pending' };
+    let pollError = '';
     for (let i = 0; i < 10 && answer.state === 'pending'; i++) {
       await new Promise((r) => setTimeout(r, 2000));
-      try { answer = await rpc('resend_invite_status', { request_id: result.request_id }); }
-      catch { break; }
+      try { answer = await rpc('resend_invite_status', { request_id: result.request_id }); pollError = ''; }
+      catch (e) { pollError = e.message || String(e); }   // keep trying; show it if it never works
     }
     await loadEverything();
     render();
@@ -662,6 +663,8 @@ async function resendInvite(userId, email, button) {
       note(limited
         ? `Not sent: Supabase's email limit was reached (${answer.message}). Nothing was changed. Wait an hour, then try once.`
         : `Not sent: Supabase refused it (${answer.status}${answer.message ? ': ' + answer.message : ''}).`, 'err');
+    } else if (pollError) {
+      note(`Queued for ${result.email}, but the page could not read Supabase's answer (${humanise(pollError)}). Check the card in a minute: "resent" appears when it went through.`, 'err');
     } else {
       note(`Queued for ${result.email}, but Supabase has not answered yet. Check the card in a minute: "resent" appears when it went through.`, 'ok');
     }

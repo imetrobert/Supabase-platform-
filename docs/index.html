@@ -643,7 +643,7 @@ async function resendInvite(userId, email, button) {
     const result = await rpc('resend_app_invite', { target_user_id: userId });
     await loadEverything();
     render();
-    note(`Invitation resent to ${result.email}, listing ${result.apps} app${result.apps === 1 ? '' : 's'}.`, 'ok');
+    note(`Resend requested for ${result.email} (${result.apps} app${result.apps === 1 ? '' : 's'}). The email should arrive within a minute; the "invited" date below updates once Supabase has processed it. If nothing arrives, check spam, then try once more after an hour.`, 'ok');
   } catch (error) {
     note(humanise(error.message), 'err');
     button.disabled = false;

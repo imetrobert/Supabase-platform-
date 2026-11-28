@@ -25,7 +25,7 @@ only the section you need. Recipes for the usual edits: `COMMON-EDITS.md`.
 - `migration/invite_user.sql` — `public.invite_app_user()`; contains a third copy of the app
   catalog (`catalog constant jsonb`). Editing the file does NOT change the live function: the
   whole function must be re-run in the Supabase SQL editor.
-- `migration/resend_invite.sql` — `public.resend_app_invite(uuid)`, behind the "Resend invitation" button on pending people. Admin guard first; refuses accepted accounts; shares the 10/hour cap; queues the send with `pg_net` (inline sends are cut off at 8s). Holds a FOURTH app catalog copy. Re-run the whole function in Supabase after editing.
+- `migration/resend_invite.sql` — `public.resend_app_invite(uuid)` and `public.resend_invite_status(bigint)` (reports Supabase's answer to the page), behind the "Resend invitation" button on pending people. Admin guard first; refuses accepted accounts; shares the 10/hour cap; queues the send with `pg_net` (inline sends are cut off at 8s). Holds a FOURTH app catalog copy. Re-run the whole function in Supabase after editing.
 - `migration/app_access_pattern.sql` — the deployed access model. `audit.sql` — standing check (check 5 skips nine functions that are public on purpose; a new anon-callable definer function should be a surprise).
   `verify_access.sql` — proves a policy by impersonating accounts.
 - `tests/admin.test.mjs` — `npm test` (needs Playwright; use only if a terminal is available).

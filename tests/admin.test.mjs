@@ -423,8 +423,10 @@ const login = async (page, password = 'right') => {
   await page.route('**/rest/v1/rpc/resend_app_invite', (route) => {
     const body = route.request().postDataJSON();
     calls.push(body);
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: body.target_user_id, email: 'pending@example.com', apps: 2 }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user_id: body.target_user_id, email: 'pending@example.com', apps: 2, request_id: 7 }) });
   });
+  await page.route('**/rest/v1/rpc/resend_invite_status', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ state: 'sent', status: 200, error_code: '', message: '' }) }));
   page.on('dialog', (d) => d.accept());
   await login(page);
   await page.waitForSelector('#admin-view:not(.hidden)', { timeout: 5000 });
@@ -436,7 +438,7 @@ const login = async (page, password = 'right') => {
   if (buttons !== 2) problems.push(`expected two "Resend invitation" buttons (the two pending people), found ${buttons}`);
   await page.locator('details.user', { hasText: 'pending@example.com' }).locator('summary').click();
   await page.locator('details.user', { hasText: 'pending@example.com' }).locator('button', { hasText: 'Resend invitation' }).click();
-  await page.waitForSelector('#status.ok:has-text("Resend requested")', { timeout: 5000 });
+  await page.waitForSelector('#status.ok:has-text("Supabase accepted it")', { timeout: 5000 });
   if (calls.length !== 1 || calls[0].target_user_id !== 'u-pending') problems.push(`resend sent the wrong request: ${JSON.stringify(calls)}`);
   console.log('  ✓ a pending person can be sent the invitation again (and only a pending one)');
   await page.close();

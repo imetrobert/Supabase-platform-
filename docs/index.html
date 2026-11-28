@@ -645,9 +645,26 @@ async function resendInvite(userId, email, button) {
   note(`Resending the invitation to ${email}…`, 'ok');
   try {
     const result = await rpc('resend_app_invite', { target_user_id: userId });
+    note(`Resend queued for ${result.email}. Checking what Supabase answers…`, 'ok');
+    // The send runs in the background, so ask for its answer for up to about 20 seconds.
+    let answer = { state: 'pending' };
+    for (let i = 0; i < 10 && answer.state === 'pending'; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try { answer = await rpc('resend_invite_status', { request_id: result.request_id }); }
+      catch { break; }
+    }
     await loadEverything();
     render();
-    note(`Resend requested for ${result.email} (${result.apps} app${result.apps === 1 ? '' : 's'}). The email should arrive within a minute; the "invited" date below updates once Supabase has processed it. If nothing arrives, check spam, then try once more after an hour.`, 'ok');
+    if (answer.state === 'sent') {
+      note(`Supabase accepted it: the invitation to ${result.email} is on its way (${result.apps} app${result.apps === 1 ? '' : 's'}). Ask them to check spam too.`, 'ok');
+    } else if (answer.state === 'refused') {
+      const limited = answer.status === 429 || answer.error_code === 'over_email_send_rate_limit';
+      note(limited
+        ? `Not sent: Supabase's email limit was reached (${answer.message}). Nothing was changed. Wait an hour, then try once.`
+        : `Not sent: Supabase refused it (${answer.status}${answer.message ? ': ' + answer.message : ''}).`, 'err');
+    } else {
+      note(`Queued for ${result.email}, but Supabase has not answered yet. Check the card in a minute: "resent" appears when it went through.`, 'ok');
+    }
   } catch (error) {
     note(humanise(error.message), 'err');
     button.disabled = false;

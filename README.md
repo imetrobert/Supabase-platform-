@@ -141,6 +141,7 @@ on conflict (user_id, app) do update set role = excluded.role;
 | `tests/admin.test.mjs` | drives both pages against a stubbed Supabase — `npm test` |
 | `migration/app_access_pattern.sql` | the deployed access model |
 | `migration/invite_user.sql` | creates an account, invites it and grants it, in one call — **needs one-time setup** |
+| `migration/resend_invite.sql` | re-sends the invitation to someone who never accepted (queued through pg_net); needs the same one-time setup as invite_user.sql |
 | `migration/delete_user.sql` | deletes an account; opens with the query for what a deletion takes with it |
 | `migration/sign_out_user.sql` | ends someone's sessions, so a revocation cannot be waited out |
 | `migration/list_app_users.sql` | lets a platform admin list accounts; `auth.users` is not reachable through the API |

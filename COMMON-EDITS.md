@@ -21,7 +21,7 @@ Same three copies as recipe 1 (page, invite page, `invite_user.sql` catalog). Mi
 invitation emails link to a dead address while the page looks fine. Re-run the function in SQL.
 
 ## 3. Grant, change or remove someone's access by hand
-Normally use the page. By SQL (Supabase SQL editor):
+Normally use the page: access.imetrobert.com, tap the person, set each app (None locks them out). App ids: `claims-tracker`, `invoicing`, `etf`, `job`, `fb-marketplace`, `toolkit`, `blog-review`, `retire-qc`, `retire-on`, `retire-personal`. Only if the page cannot do it, use SQL, and give Robert the request as a prompt to paste into the Supabase AI assistant (he does not run raw SQL himself); the statements below are what that prompt should ask for:
 ```sql
 -- grant
 insert into public.app_access (user_id, app, role)
